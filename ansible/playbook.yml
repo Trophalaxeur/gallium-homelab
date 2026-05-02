@@ -1,0 +1,10 @@
+---
+- name: Deploy AdGuard Home
+  hosts: adguard
+  become: true
+
+  # Variables publiques : ansible/group_vars/all/vars.yml
+  # Secrets       : ansible/group_vars/all/vault.yml (gitignored — ansible-vault)
+
+  roles:
+    - adguard-home

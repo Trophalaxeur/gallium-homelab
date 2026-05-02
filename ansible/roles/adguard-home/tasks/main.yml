@@ -1,0 +1,53 @@
+---
+- name: Install dependencies
+  apt:
+    name: [curl, tar]
+    state: present
+    update_cache: true
+
+- name: Create AdGuard Home directory
+  file:
+    path: /opt/AdGuardHome
+    state: directory
+    mode: "0755"
+
+- name: Download AdGuard Home
+  get_url:
+    url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
+    dest: /tmp/adguard-home.tar.gz
+    mode: "0644"
+
+- name: Extract AdGuard Home binary
+  unarchive:
+    src: /tmp/adguard-home.tar.gz
+    dest: /tmp
+    remote_src: true
+
+- name: Install binary
+  copy:
+    src: /tmp/AdGuardHome/AdGuardHome
+    dest: /opt/AdGuardHome/AdGuardHome
+    mode: "0755"
+    remote_src: true
+
+- name: Deploy configuration
+  template:
+    src: adguard-home.yaml.j2
+    dest: /opt/AdGuardHome/AdGuardHome.yaml
+    mode: "0600"
+  notify: restart adguardhome
+
+- name: Install AdGuard Home as service systemd
+  command: /opt/AdGuardHome/AdGuardHome -s install
+  args:
+    creates: /etc/systemd/system/AdGuardHome.service
+
+- name: Ensure AdGuard Home is started and enabled
+  systemd:
+    name: AdGuardHome
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Flush handlers
+  meta: flush_handlers

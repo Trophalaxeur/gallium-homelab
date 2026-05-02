@@ -1,0 +1,17 @@
+proxmox_endpoint = "https://<PROXMOX_IP>:8006"
+proxmox_username = "terraform@pve"
+proxmox_node     = "gallium"
+proxmox_ip       = "<PROXMOX_IP>"
+
+adguard_ip   = "192.168.1.53"
+adguard_vmid = 100
+gateway      = "192.168.1.1"
+
+# Vérifier le nom exact : ls /var/lib/vz/template/cache/ sur Proxmox
+lxc_template = "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+
+ssh_public_key = "ssh-ed25519 AAAA..."
+
+# Secrets — ne jamais committer terraform.tfvars
+proxmox_password = ""
+root_password    = ""

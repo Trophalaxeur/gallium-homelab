@@ -1,0 +1,76 @@
+bind_host: 0.0.0.0
+bind_port: 3000
+
+users:
+  - name: "{{ adguard_admin_user }}"
+    password: "{{ adguard_admin_password_hash }}"
+
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: fr
+theme: auto
+
+dns:
+  bind_hosts:
+    - 0.0.0.0
+  port: 53
+
+  upstream_dns:
+    - https://dns10.quad9.net/dns-query
+    - https://dns.cloudflare.com/dns-query
+  bootstrap_dns:
+    - 9.9.9.9
+    - 1.1.1.1
+
+  protection_enabled: true
+  blocking_mode: default
+  ratelimit: 20
+  refuse_any: true
+
+  cache_size: 4194304
+  cache_optimistic: true
+
+  enable_dnssec: false
+
+  filtering_enabled: true
+  filters_update_interval: 24
+
+  querylog_enabled: true
+  querylog_interval: 90d
+  statistics_interval: 7d
+
+  # Enregistrements DNS locaux
+  rewrites:
+    - domain: proxmox.lan
+      answer: "{{ proxmox_ip }}"
+    - domain: adguard.lan
+      answer: "{{ adguard_ip }}"
+
+  blocked_services:
+    schedule:
+      time_zone: Europe/Paris
+    ids: []
+
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+    name: AdAway Default Blocklist
+    id: 2
+
+dhcp:
+  enabled: false
+  interface_name: ""
+  local_domain_name: lan
+
+tls:
+  enabled: false
+
+log:
+  verbose: false
+
+schema_version: 28

@@ -1,0 +1,16 @@
+# Terraform — secrets et état local
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+
+# Ansible — vault et fichiers secrets
+ansible/group_vars/*/vault.yml
+ansible/*.retry
+ansible/.vault_pass
+
+# Divers
+.DS_Store
+*.log
+docs/next-steps.md

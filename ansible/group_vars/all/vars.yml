@@ -1,0 +1,4 @@
+---
+proxmox_ip: "192.168.1.32"
+adguard_ip: "192.168.1.53"
+adguard_admin_user: "admin"
