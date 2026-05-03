@@ -3,13 +3,14 @@ variable "proxmox_endpoint" {
   type        = string
 }
 
-variable "proxmox_username" {
-  description = "Utilisateur Proxmox API (ex: terraform@pve!token-id)"
+variable "proxmox_token_id" {
+  description = "Token ID Proxmox (format: user@realm!token-name)"
   type        = string
+  default     = "terraform@pve!terraform_token"
 }
 
-variable "proxmox_password" {
-  description = "Mot de passe Proxmox"
+variable "proxmox_api_token" {
+  description = "Secret du token Proxmox API (UUID)"
   type        = string
   sensitive   = true
 }
@@ -29,7 +30,7 @@ variable "proxmox_ip" {
 variable "lxc_template" {
   description = "Template LXC (doit être présent dans Proxmox)"
   type        = string
-  default     = "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
 
 variable "adguard_vmid" {
