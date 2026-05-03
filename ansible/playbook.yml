@@ -2,9 +2,22 @@
 - name: Deploy AdGuard Home
   hosts: adguard
   become: true
+  gather_facts: false
 
   # Variables publiques : ansible/group_vars/all/vars.yml
   # Secrets       : ansible/group_vars/all/vault.yml (gitignored — ansible-vault)
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
 
   roles:
     - adguard-home

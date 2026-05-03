@@ -11,8 +11,7 @@ terraform {
 
 provider "proxmox" {
   endpoint  = var.proxmox_endpoint
-  username  = var.proxmox_token_id
-  api_token = var.proxmox_api_token
+  api_token = "${var.proxmox_token_id}=${var.proxmox_api_token}"
   insecure  = true
 }
 
@@ -56,7 +55,7 @@ resource "proxmox_virtual_environment_container" "adguard" {
   }
 
   disk {
-    datastore_id = "local-lvm"
+    datastore_id = "local-zfs"
     size         = 4
   }
 

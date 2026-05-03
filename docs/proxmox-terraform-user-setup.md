@@ -7,10 +7,11 @@ Create a Terraform service account on Proxmox with a least-privilege custom role
 ## 1. Create the custom role `TerraformProv`
 
 ```bash
-pveum role add TerraformProv -privs "VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Audit VM.PowerMgmt Datastore.AllocateSpace Datastore.Audit"
+pveum role add TerraformProv -privs "VM.Allocate VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Audit VM.PowerMgmt Datastore.AllocateSpace Datastore.Audit SDN.Use"
 ```
 
-> `VM.Monitor` no longer exists in Proxmox 9 — do not include it.
+> `VM.Monitor` no longer exists in Proxmox 9 — do not include it.  
+> `SDN.Use` is required when attaching a container/VM to a bridge managed by the Proxmox SDN module (e.g. `vmbr0` in a localnetwork zone).
 
 ---
 
