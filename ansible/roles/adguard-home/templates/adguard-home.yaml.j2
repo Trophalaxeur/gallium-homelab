@@ -83,6 +83,12 @@ filtering:
     - domain: thallium.lan
       answer: "{{ thallium_ip }}"
       enabled: true
+    - domain: neon.lan
+      answer: "{{ neon_ip }}"
+      enabled: true
+    - domain: neon.flefevre.fr
+      answer: "{{ neon_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

@@ -105,10 +105,8 @@
     force: true
 
 # Step 7 — multica CLI
-# ⚠️ Verify the exact install URL at https://multica.ai/docs/self-host-quickstart
-# before running. The command below is a placeholder — replace with the official script.
 - name: Install multica CLI
-  shell: curl -fsSL https://multica.ai/install.sh | bash
+  shell: curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
   args:
     creates: /usr/local/bin/multica
 
@@ -125,6 +123,14 @@
   shell: /home/neonuser/.local/bin/rtk init -g
   args:
     creates: /home/neonuser/.claude/settings.json
+
+# SSH access — authorize Thallium's key for neonuser
+# root access is already handled by Terraform via user_account.keys
+- name: Authorize Thallium SSH key for neonuser
+  ansible.posix.authorized_key:
+    user: neonuser
+    state: present
+    key: "{{ ssh_public_key }}"
 
 # Step 8 — SSH deploy key
 - name: Create .ssh directory for neonuser
