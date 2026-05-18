@@ -115,12 +115,27 @@
     enabled: true
     daemon_reload: true
 
+# Log to /var/log so renewal failures are observable; rotated by logrotate task below.
 - name: Set up acme.sh cron for auto-renewal
   cron:
     name: "acme.sh renewal"
     minute: "0"
     hour: "0"
-    job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh > /dev/null 2>&1'
+    job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh >> /var/log/acme-renewal.log 2>&1'
+
+- name: Configure logrotate for acme.sh renewal log
+  copy:
+    dest: /etc/logrotate.d/acme-renewal
+    content: |
+      /var/log/acme-renewal.log {
+        monthly
+        rotate 6
+        compress
+        missingok
+        notifempty
+        create 0640 root adm
+      }
+    mode: "0644"
 
 - name: Flush handlers
   meta: flush_handlers

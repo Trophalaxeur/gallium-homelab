@@ -121,23 +121,31 @@
     state: link
     force: true
 
-# Step 7 — multica CLI (pinned to tag matching the docker-compose checkout)
+# Step 7 — multica CLI (pinned tag + sha256 checksum)
+- name: Download multica CLI install script (verified)
+  get_url:
+    url: https://raw.githubusercontent.com/multica-ai/multica/refs/tags/v0.3.2/scripts/install.sh
+    dest: /tmp/multica-install.sh
+    mode: "0755"
+    checksum: "sha256:20cf22bb5324e868f081aeaa669267aaecff1949ca29c21996323bd3fa138870"
+
 - name: Install multica CLI
-  shell: |
-    set -o pipefail
-    curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/refs/tags/v0.3.2/scripts/install.sh | bash
+  command: /tmp/multica-install.sh
   args:
-    executable: /bin/bash
     creates: /usr/local/bin/multica
 
-# Step 7b — RTK (pinned)
+# Step 7b — RTK (pinned tag + sha256 checksum)
+- name: Download RTK install script (verified)
+  get_url:
+    url: https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh
+    dest: /tmp/rtk-install.sh
+    mode: "0755"
+    checksum: "sha256:09f3d9b5543f772895f5cb0c66dc93602be451bb09fbd220bba185c4a14cd88d"
+
 - name: Install RTK (token-optimization proxy)
   become_user: neonuser
-  shell: |
-    set -o pipefail
-    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh | bash
+  command: /tmp/rtk-install.sh
   args:
-    executable: /bin/bash
     creates: /home/neonuser/.local/bin/rtk
 
 - name: Initialize RTK Claude Code hook for neonuser
