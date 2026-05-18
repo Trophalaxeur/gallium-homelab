@@ -16,7 +16,7 @@
 | Parameter | Value | Why |
 |---|---|---|
 | `dns.bind_hosts` | `0.0.0.0` | DNS listens on all interfaces — required to serve the whole LAN. |
-| `dns.port` | `53` | Standard DNS port. Cannot be changed — all DNS clients expect port 53. |
+| `dns.port` | `53` | Standard DNS port — kept as default. AdGuard supports any port, but a non-53 choice means configuring every DNS client (router, OS resolvers) explicitly. |
 | `upstream_dns` | Quad9 DoH + Cloudflare DoH | Encrypted DNS over HTTPS. Two providers for redundancy with different geographies. |
 | `bootstrap_dns` | `9.9.9.9`, `1.1.1.1` | Plain DNS used at startup to resolve the DoH upstream URLs before the encrypted resolvers are reachable. |
 

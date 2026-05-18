@@ -13,7 +13,12 @@ trap 'rc=$?; if [ $rc -ne 0 ]; then echo "pg_backup failed (rc=$rc) at $(date)" 
 
 [ -d "$BACKUP_DIR" ] || { echo "$BACKUP_DIR missing"; exit 1; }
 
-docker compose -f /opt/multica/docker-compose.selfhost.yml exec -T postgres \
+# Run docker compose from the project dir so it (a) discovers /opt/multica/.env
+# (compose looks for .env in cwd by default) and (b) derives the same project
+# name "multica" used at deploy time — otherwise `exec postgres` may target
+# a non-existent stack when cron invokes us from /root.
+cd /opt/multica
+docker compose -f docker-compose.selfhost.yml exec -T postgres \
   pg_dump -U multica multica | gzip > "$DUMP_FILE"
 
 chown neonuser:neonuser "$DUMP_FILE"
