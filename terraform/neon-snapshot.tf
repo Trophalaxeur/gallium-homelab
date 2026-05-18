@@ -1,6 +1,11 @@
-# Proxmox snapshot schedule for LXC neon
+# Proxmox backup schedule for LXC neon (vzdump --mode snapshot)
 #
-# The bpg/proxmox provider does not expose a snapshot schedule resource.
+# Proxmox distinguishes two concepts:
+#   - Snapshot: filesystem-level point-in-time copy, lives on the same storage as the LXC.
+#   - Backup (vzdump): exported archive, can use a snapshot internally as the consistency
+#     mechanism (`--mode snapshot`). What we configure here is a backup job in snapshot mode.
+#
+# The bpg/proxmox provider does not expose a backup schedule resource.
 # Configure it manually in the Proxmox UI after first `terraform apply`:
 #
 #   Datacenter → Backup → Add

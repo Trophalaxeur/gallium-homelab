@@ -30,4 +30,4 @@ Each entry must follow this format:
 - ...
 ```
 
-Append new entries at the top of the file. Never overwrite the file — always prepend the new entry and preserve existing content below it. The file is gitignored and serves as a running working log.
+Prepend new entries at the top of the file. Never overwrite the file — always preserve existing content below the new entry. The file is gitignored and serves as a running working log.
