@@ -1,18 +1,24 @@
 ---
 # Step 16 — multica CLI config (cloud mode)
-# Idempotent login: check auth status first, only login if not already logged in.
+- name: Configure multica CLI for cloud (multica.ai)
+  become_user: neonuser
+  command: /usr/local/bin/multica setup cloud
+  args:
+    creates: /home/neonuser/.multica/config.json
+
+# Idempotent login: grep exits 0 if "Not authenticated" is found → need to login.
 - name: Check multica CLI auth status
   become_user: neonuser
-  command: multica auth status
-  register: multica_auth
+  shell: /usr/local/bin/multica auth status 2>&1 | grep -q 'Not authenticated'
+  register: multica_not_authed
   failed_when: false
   changed_when: false
 
 - name: Log in multica CLI with PAT
   become_user: neonuser
-  command: multica login --token {{ vault_multica_pat }}
+  command: /usr/local/bin/multica login --token {{ vault_multica_pat }}
   no_log: true
-  when: multica_auth.rc != 0
+  when: multica_not_authed.rc == 0
 
 # Step 17 — re-deploy /etc/neon.env with MULTICA_TOKEN (cloud PAT)
 # The template includes MULTICA_TOKEN conditionally when vault_multica_pat is defined.

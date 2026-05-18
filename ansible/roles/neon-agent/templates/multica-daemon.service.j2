@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 User=neonuser
-ExecStart=/usr/local/bin/multica daemon start
+ExecStart=/usr/local/bin/multica daemon start --foreground
 Restart=always
 RestartSec=10
 EnvironmentFile=/etc/neon.env
