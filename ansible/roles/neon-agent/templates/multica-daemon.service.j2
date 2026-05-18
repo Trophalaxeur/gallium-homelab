@@ -1,11 +1,10 @@
 [Unit]
-Description=Multica daemon
-After=network.target docker.service
-Wants=docker.service
+Description=Multica daemon (cloud mode)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=neonuser
-ExecStartPre=/bin/bash -c 'for i in $(seq 60); do curl -sf http://localhost:8080/readyz >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1'
 ExecStart=/usr/local/bin/multica daemon start
 Restart=always
 RestartSec=10

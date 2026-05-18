@@ -1,10 +1,4 @@
 ---
-- name: restart multica
-  community.docker.docker_compose_v2:
-    project_src: /opt/multica
-    files: [docker-compose.selfhost.yml]
-    state: restarted
-
 - name: restart multica-daemon
   systemd:
     name: multica-daemon

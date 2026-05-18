@@ -1,14 +1,5 @@
 ---
-# Step 18 — multica CLI config
-- name: Configure multica CLI for neonuser (self-host URL)
-  become_user: neonuser
-  command: >
-    multica setup self-host
-    --server-url http://localhost:8080
-    --app-url http://localhost:3000
-  args:
-    creates: /home/neonuser/.multica/config.json
-
+# Step 18 — multica CLI config (cloud mode)
 # Idempotent login: check auth status first, only login if not already logged in.
 - name: Check multica CLI auth status
   become_user: neonuser
@@ -23,7 +14,7 @@
   no_log: true
   when: multica_auth.rc != 0
 
-# Step 19 — re-deploy /etc/neon.env with MULTICA_TOKEN
+# Step 19 — re-deploy /etc/neon.env with MULTICA_TOKEN (cloud PAT)
 # The template includes MULTICA_TOKEN conditionally when vault_multica_pat is defined.
 # Re-running Phase 1 after this point preserves the token (single source of truth).
 - name: Re-deploy /etc/neon.env with MULTICA_TOKEN

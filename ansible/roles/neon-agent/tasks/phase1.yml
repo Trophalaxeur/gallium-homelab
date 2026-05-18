@@ -278,44 +278,6 @@
     - local_key_norm not in remote_keys_norm
   no_log: true
 
-# Step 9 — Multica Docker Compose
-- name: Clone Multica repo
-  git:
-    repo: https://github.com/multica-ai/multica.git
-    dest: /opt/multica
-    version: "{{ multica_tag }}"
-    force: false
-
-- name: Deploy Multica .env
-  template:
-    src: multica-env.j2
-    dest: /opt/multica/.env
-    owner: root
-    group: root
-    mode: "0600"
-  no_log: true   # renders JWT_SECRET, SMTP password
-  notify: restart multica
-
-# apt installs docker-ce but doesn't start it; explicit start needed before
-# any docker compose / docker socket access works on a fresh Debian install.
-- name: Ensure Docker daemon is running and enabled
-  systemd:
-    name: docker
-    state: started
-    enabled: true
-
-- name: Wait for Docker socket
-  wait_for:
-    path: /var/run/docker.sock
-    timeout: 30
-
-- name: Pull Multica images
-  community.docker.docker_compose_v2:
-    project_src: /opt/multica
-    files: [docker-compose.selfhost.yml]
-    state: present
-    pull: always
-
 # Step 10 — Runtime directories
 - name: Create neon runtime directories
   file:
@@ -328,7 +290,6 @@
     - /home/neonuser/.neon/context
     - /home/neonuser/.neon/repos/Trophalaxeur
     - /home/neonuser/.neon/logs
-    - /home/neonuser/.neon/backups/postgres
 
 # Step 11 — Clone repos
 # /opt is root-owned; pre-create /opt/neon-agents with neonuser ownership
@@ -390,25 +351,7 @@
     group: root
     mode: "0644"
 
-# Step 14 — pg_dump script
-- name: Deploy pg_dump script
-  template:
-    src: neon-pg-backup.sh.j2
-    dest: /usr/local/sbin/neon-pg-backup.sh
-    owner: root
-    group: root
-    mode: "0750"
-
-# Step 15 — pg_dump cron
-- name: Deploy pg_dump cron
-  template:
-    src: cron-pg-backup.j2
-    dest: /etc/cron.d/neon-pg-backup
-    owner: root
-    group: root
-    mode: "0644"
-
-# Step 16 — logrotate
+# Step 14 — logrotate
 - name: Deploy logrotate config
   template:
     src: logrotate-neon.j2
@@ -417,7 +360,7 @@
     group: root
     mode: "0644"
 
-# Step 17 — /etc/neon.env (Phase 1 — no MULTICA_TOKEN yet)
+# Step 15 — /etc/neon.env (Phase 1 — no MULTICA_TOKEN yet)
 - name: Deploy /etc/neon.env
   template:
     src: neon-env.j2

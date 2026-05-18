@@ -13,8 +13,5 @@ smtp_port: 587
 smtp_user: "me@flefevre.fr"
 smtp_from: "neon@flefevre.fr"
 neon_admin_email: "admin@flefevre.fr"
-multica_allowed_emails: "me@flefevre.fr"
-multica_tag: "v0.3.2"   # pinned release tag — bump explicitly to upgrade
-
 # Admin SSH public key — used by Ansible to authorize neonuser (Terraform handles root)
 ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+tX7HsjNAPltIWdXTp flefevre@thallium"

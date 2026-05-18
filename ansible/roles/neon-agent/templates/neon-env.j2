@@ -1,6 +1,5 @@
 CLAUDE_CODE_OAUTH_TOKEN={{ vault_claude_oauth_token }}
 NEON_ADMIN_EMAIL={{ neon_admin_email | default('admin@flefevre.fr') }}
-MULTICA_SERVER_URL=ws://localhost:8080/ws
 PATH=/home/neonuser/.local/bin:/usr/local/bin:/usr/bin:/bin
 {% if vault_multica_pat is defined %}
 MULTICA_TOKEN={{ vault_multica_pat }}
