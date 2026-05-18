@@ -60,12 +60,20 @@
   args:
     creates: /root/.acme.sh/acme.sh
 
+- name: Register acme.sh account email
+  command: /root/.acme.sh/acme.sh --register-account -m {{ acme_email }} --server letsencrypt
+  environment:
+    HOME: /root
+  args:
+    creates: /root/.acme.sh/ca/acme-v02.api.letsencrypt.org/directory/account.json
+
 - name: Issue certificate for {{ adguard_domain }}
   command: >
     /root/.acme.sh/acme.sh --issue
     -d {{ adguard_domain }}
     --dns dns_online
     --server letsencrypt
+    --accountemail {{ acme_email }}
   environment:
     HOME: /root
     ONLINE_API_KEY: "{{ online_api_key }}"

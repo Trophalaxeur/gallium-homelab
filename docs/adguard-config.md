@@ -4,8 +4,8 @@
 
 | Parameter | Value | Why |
 |---|---|---|
-| `bind_host` | `0.0.0.0` | Listens on all interfaces so the LXC responds to requests from the local network. Use `127.0.0.1` to restrict to local only. |
-| `bind_port` | `3000` | Web UI port. Avoids conflicts with other HTTP services. Can be changed to `80` if no other service runs on it. |
+| `http.address` | `0.0.0.0:3000` | Listens on all interfaces port 3000 (schema v34 unified field). Use `127.0.0.1:3000` to restrict to local only. |
+| `http.session_ttl` | `720h` | Web UI session lifetime (30 days). |
 | `auth_attempts` | `5` | Maximum failed login attempts before blocking the IP. Lower to `3` for stricter security. |
 | `block_auth_min` | `15` | Duration in minutes an IP is blocked after exhausting auth attempts. |
 
@@ -83,8 +83,10 @@ Rewrites allow AdGuard to resolve custom local hostnames without a full DNS serv
 
 | Domain | Resolves to | Purpose |
 |---|---|---|
-| `proxmox.lan` | `192.168.1.32` | Proxmox web UI |
-| `adguard.lan` | `192.168.1.53` | AdGuard Home web UI |
+| `proxmox.lan` / `proxmox.flefevre.fr` | `192.168.1.32` | Proxmox web UI |
+| `adguard.lan` / `adguard.flefevre.fr` | `192.168.1.53` | AdGuard Home web UI |
+| `thallium.lan` | `192.168.1.20` | Dev machine |
+| `neon.lan` / `neon.flefevre.fr` | `192.168.1.60` | Neon agents LXC (Multica + JeanMiPO) |
 
 The `.lan` suffix is a convention for non-routable local domains.
 Alternatives: `.home`, `.internal`.
@@ -97,6 +99,21 @@ Avoid `.local` — it is reserved for mDNS (Bonjour/Avahi) and can cause conflic
 | Parameter | Value | Notes |
 |---|---|---|
 | `dhcp.enabled` | `false` | DHCP is handled by the Livebox 6. Enable only if you want AdGuard to replace it. |
-| `tls.enabled` | `false` | No HTTPS/DoT/DoQ for now. Can be enabled later with a certificate (e.g. Let's Encrypt via a reverse proxy). |
 | `parental_enabled` | `false` | Parental controls — not needed here. |
 | `safebrowsing_enabled` | `false` | Google Safe Browsing integration — adds latency, disabled by default. |
+
+---
+
+## TLS / HTTPS
+
+TLS is **enabled** with a Let's Encrypt certificate issued via acme.sh (DNS-01 challenge through Online.net).
+
+| Parameter | Value | Why |
+|---|---|---|
+| `tls.enabled` | `true` | HTTPS for the web UI and DoT/DoQ for DNS. |
+| `tls.server_name` | `adguard.flefevre.fr` | Must match the cert's Common Name. |
+| `tls.port_https` | `443` | Standard HTTPS port for the web UI. |
+| `tls.port_dns_over_tls` | `853` | DoT — encrypted DNS over TLS for compatible clients. |
+| `tls.port_dns_over_quic` | `853` | DoQ — encrypted DNS over QUIC (UDP). |
+| `tls.certificate_path` | `/opt/AdGuardHome/cert/cert.pem` | Provisioned by acme.sh. |
+| `tls.private_key_path` | `/opt/AdGuardHome/cert/key.pem` | Provisioned by acme.sh. |

@@ -37,10 +37,11 @@ Regenerate the token in the Proxmox UI:
 
 ### `root_password` lost
 
-Reset it directly via the Proxmox console (no SSH needed):
+The same `root_password` is used for all LXCs provisioned by Terraform. Reset it on each affected container directly via the Proxmox console (no SSH needed):
 
-1. Proxmox UI → select the AdGuard LXC → Console
+1. Proxmox UI → select the affected LXC → Console
 2. Run: `passwd root`
+3. Repeat for every LXC that needs the new password.
 
 ### AdGuard admin password / vault lost
 
