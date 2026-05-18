@@ -8,23 +8,34 @@
     state: present
 
 # Step 2 — external repos
-# pipefail ensures curl failures aren't masked by the downstream command exit 0
-- name: Add NodeSource repo (Node 20 LTS)
-  shell: |
-    set -o pipefail
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  args:
-    executable: /bin/bash
-    creates: /etc/apt/sources.list.d/nodesource.list
+# Use signed APT keys + explicit sources rather than `curl | bash` setup scripts
+# (no arbitrary remote code execution at deploy time).
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add NodeSource signing key
+  get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/nodesource.asc
+    mode: "0644"
+    force: false
+
+- name: Add NodeSource APT repo (Node 20 LTS)
+  copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_20.x nodistro main
+    mode: "0644"
 
 - name: Add GitHub CLI signing key
-  shell: |
-    set -o pipefail
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-      | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-  args:
-    executable: /bin/bash
-    creates: /usr/share/keyrings/githubcli-archive-keyring.gpg
+  get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+    force: false
 
 - name: Add GitHub CLI repo
   copy:
@@ -34,12 +45,11 @@
     mode: "0644"
 
 - name: Add Docker signing key
-  shell: |
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    chmod a+r /etc/apt/keyrings/docker.asc
-  args:
-    creates: /etc/apt/keyrings/docker.asc
+  get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+    force: false
 
 - name: Add Docker repo
   shell: |
@@ -144,7 +154,7 @@
     state: present
     key: "{{ ssh_public_key }}"
 
-# Step 8 — SSH deploy key
+# Step 8 — SSH deploy keys (one per repo, GitHub limitation)
 - name: Create .ssh directory for neonuser
   file:
     path: /home/neonuser/.ssh
@@ -153,13 +163,18 @@
     group: neonuser
     mode: "0700"
 
-- name: Generate SSH deploy key
+- name: Generate SSH deploy key per repository
   become_user: neonuser
-  command: ssh-keygen -t ed25519 -f /home/neonuser/.ssh/neon_deploy -N ""
+  command: >
+    ssh-keygen -t ed25519
+    -f /home/neonuser/.ssh/neon_deploy_{{ item }}
+    -N ""
+    -C "neon-deploy-{{ item }}"
   args:
-    creates: /home/neonuser/.ssh/neon_deploy
+    creates: /home/neonuser/.ssh/neon_deploy_{{ item }}
+  loop: "{{ deploy_key_repos }}"
 
-- name: Deploy SSH config
+- name: Deploy SSH config (per-repo host aliases)
   template:
     src: ssh-config.j2
     dest: /home/neonuser/.ssh/config
@@ -177,30 +192,31 @@
     state: present
     path: /home/neonuser/.ssh/known_hosts
 
-- name: Read deploy public key
+- name: Read deploy public keys
   slurp:
-    src: /home/neonuser/.ssh/neon_deploy.pub
-  register: neon_deploy_pubkey
+    src: /home/neonuser/.ssh/neon_deploy_{{ item }}.pub
+  register: deploy_pubkeys
+  loop: "{{ deploy_key_repos }}"
 
-# Register the deploy key on each repo. 201 = created, 422 = already exists
-# (validated below — any other 422 reason is treated as a real failure).
+# Register each deploy key on its own repo (GitHub deploy keys are repo-scoped:
+# one key cannot be attached to multiple repos).
+# 201 = created, 422 "already in use" = idempotent rerun; any other 422 fails below.
 - name: Register deploy key on each repository
   uri:
-    url: "https://api.github.com/repos/Trophalaxeur/{{ item }}/keys"
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item.item }}/keys"
     method: POST
     headers:
       Authorization: "Bearer {{ vault_gh_admin_token }}"
       Accept: application/vnd.github+json
     body_format: json
     body:
-      title: "neon-deploy-{{ ansible_hostname }}"
-      key: "{{ neon_deploy_pubkey.content | b64decode | trim }}"
+      title: "neon-deploy-{{ item.item }}-{{ ansible_hostname }}"
+      key: "{{ item.content | b64decode | trim }}"
       read_only: true
     status_code: [201, 422]
-  loop:
-    - neon-agents
-    - homelab-gallium
-    - bismuth-blog
+  loop: "{{ deploy_pubkeys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
   register: deploy_key_results
   no_log: true
 
@@ -211,11 +227,11 @@
         item.status == 201
         or (item.status == 422
             and (item.json.errors | default([{'message': ''}]))[0].message == 'key is already in use')
-    fail_msg: "Deploy key registration on {{ item.item }} returned unexpected HTTP {{ item.status }}"
-    success_msg: "{{ item.item }}: {{ 'created' if item.status == 201 else 'already exists' }}"
+    fail_msg: "Deploy key registration on {{ item.item.item }} returned unexpected HTTP {{ item.status }}"
+    success_msg: "{{ item.item.item }}: {{ 'created' if item.status == 201 else 'already exists' }}"
   loop: "{{ deploy_key_results.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.item.item }}"
 
 # Step 9 — Multica Docker Compose
 - name: Clone Multica repo
@@ -267,33 +283,31 @@
     group: neonuser
     mode: "0755"
 
+# Clones use per-repo SSH host aliases (defined in ~/.ssh/config) so each
+# repo authenticates with its own deploy key.
 - name: Clone neon-agents to /opt/neon-agents
   become_user: neonuser
   git:
-    repo: git@github.com:Trophalaxeur/neon-agents.git
+    repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
     dest: /opt/neon-agents
-    accept_hostkey: true
 
 - name: Clone neon-agents to context repos
   become_user: neonuser
   git:
-    repo: git@github.com:Trophalaxeur/neon-agents.git
+    repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/neon-agents
-    accept_hostkey: true
 
 - name: Clone homelab-gallium to context repos
   become_user: neonuser
   git:
-    repo: git@github.com:Trophalaxeur/homelab-gallium.git
+    repo: git@homelab-gallium.github.com:Trophalaxeur/homelab-gallium.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/homelab-gallium
-    accept_hostkey: true
 
 - name: Clone bismuth-blog to context repos
   become_user: neonuser
   git:
-    repo: git@github.com:Trophalaxeur/bismuth-blog.git
+    repo: git@bismuth-blog.github.com:Trophalaxeur/bismuth-blog.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/bismuth-blog
-    accept_hostkey: true
 
 # Step 12 — Initial context build
 - name: Build initial context (force)

@@ -120,7 +120,7 @@
     name: "acme.sh renewal"
     minute: "0"
     hour: "0"
-    job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh > /dev/null'
+    job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh > /dev/null 2>&1'
 
 - name: Flush handlers
   meta: flush_handlers

@@ -1,0 +1,9 @@
+---
+# Repos that need a GitHub deploy key on the neon LXC.
+# Each gets its own ed25519 key (GitHub deploy keys are repo-scoped — one key
+# can only be attached to one repo) and an SSH host alias.
+# Order matters only for readability — the play is fully idempotent.
+deploy_key_repos:
+  - neon-agents
+  - homelab-gallium
+  - bismuth-blog
