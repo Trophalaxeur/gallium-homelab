@@ -9,6 +9,11 @@ gateway      = "192.168.1.1"
 
 lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 
+# Proxmox storage pool for LXC disks.
+# Use "local-zfs" if you have a ZFS pool, "local-lvm" otherwise.
+# ⚠️ Changing this for an existing LXC triggers a ForceNew (container recreated).
+lxc_datastore = "local-zfs"
+
 ssh_public_key = "ssh-ed25519 AAAA..."
 
 neon_vmid          = 101

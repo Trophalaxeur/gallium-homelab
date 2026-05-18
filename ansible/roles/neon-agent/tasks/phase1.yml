@@ -8,16 +8,22 @@
     state: present
 
 # Step 2 — external repos
+# pipefail ensures curl failures aren't masked by the downstream command exit 0
 - name: Add NodeSource repo (Node 20 LTS)
-  shell: curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  shell: |
+    set -o pipefail
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   args:
+    executable: /bin/bash
     creates: /etc/apt/sources.list.d/nodesource.list
 
 - name: Add GitHub CLI signing key
   shell: |
+    set -o pipefail
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
   args:
+    executable: /bin/bash
     creates: /usr/share/keyrings/githubcli-archive-keyring.gpg
 
 - name: Add GitHub CLI repo
@@ -106,16 +112,21 @@
 
 # Step 7 — multica CLI
 - name: Install multica CLI
-  shell: curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
+  shell: |
+    set -o pipefail
+    curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash
   args:
+    executable: /bin/bash
     creates: /usr/local/bin/multica
 
 # Step 7b — RTK (pinned)
 - name: Install RTK (token-optimization proxy)
   become_user: neonuser
   shell: |
-    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh | sh
+    set -o pipefail
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh | bash
   args:
+    executable: /bin/bash
     creates: /home/neonuser/.local/bin/rtk
 
 - name: Initialize RTK Claude Code hook for neonuser
@@ -170,24 +181,11 @@
     src: /home/neonuser/.ssh/neon_deploy.pub
   register: neon_deploy_pubkey
 
-- name: Register deploy key on neon-agents
+# Register the deploy key on each repo. 201 = created, 422 = already exists
+# (validated below — any other 422 reason is treated as a real failure).
+- name: Register deploy key on each repository
   uri:
-    url: https://api.github.com/repos/Trophalaxeur/neon-agents/keys
-    method: POST
-    headers:
-      Authorization: "Bearer {{ vault_gh_admin_token }}"
-      Accept: application/vnd.github+json
-    body_format: json
-    body:
-      title: "neon-deploy-{{ ansible_hostname }}"
-      key: "{{ neon_deploy_pubkey.content | b64decode | trim }}"
-      read_only: true
-    status_code: [201, 422]   # 422 = key already exists
-  no_log: true
-
-- name: Register deploy key on homelab-gallium
-  uri:
-    url: https://api.github.com/repos/Trophalaxeur/homelab-gallium/keys
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item }}/keys"
     method: POST
     headers:
       Authorization: "Bearer {{ vault_gh_admin_token }}"
@@ -198,22 +196,25 @@
       key: "{{ neon_deploy_pubkey.content | b64decode | trim }}"
       read_only: true
     status_code: [201, 422]
+  loop:
+    - neon-agents
+    - homelab-gallium
+    - bismuth-blog
+  register: deploy_key_results
   no_log: true
 
-- name: Register deploy key on bismuth-blog
-  uri:
-    url: https://api.github.com/repos/Trophalaxeur/bismuth-blog/keys
-    method: POST
-    headers:
-      Authorization: "Bearer {{ vault_gh_admin_token }}"
-      Accept: application/vnd.github+json
-    body_format: json
-    body:
-      title: "neon-deploy-{{ ansible_hostname }}"
-      key: "{{ neon_deploy_pubkey.content | b64decode | trim }}"
-      read_only: true
-    status_code: [201, 422]
-  no_log: true
+- name: Verify each deploy key was created or already present
+  ansible.builtin.assert:
+    that:
+      - >
+        item.status == 201
+        or (item.status == 422
+            and (item.json.errors | default([{'message': ''}]))[0].message == 'key is already in use')
+    fail_msg: "Deploy key registration on {{ item.item }} returned unexpected HTTP {{ item.status }}"
+    success_msg: "{{ item.item }}: {{ 'created' if item.status == 201 else 'already exists' }}"
+  loop: "{{ deploy_key_results.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 # Step 9 — Multica Docker Compose
 - name: Clone Multica repo
@@ -254,6 +255,16 @@
     - /home/neonuser/.neon/backups/postgres
 
 # Step 11 — Clone repos
+# /opt is root-owned; pre-create /opt/neon-agents with neonuser ownership
+# so the git clone (run as neonuser) can write into it.
+- name: Create /opt/neon-agents with neonuser ownership
+  file:
+    path: /opt/neon-agents
+    state: directory
+    owner: neonuser
+    group: neonuser
+    mode: "0755"
+
 - name: Clone neon-agents to /opt/neon-agents
   become_user: neonuser
   git:
