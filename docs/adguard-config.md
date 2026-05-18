@@ -71,9 +71,11 @@
 
 | Parameter | Value | Why |
 |---|---|---|
-| `querylog_enabled` | `true` | Logs every DNS query. Useful for diagnostics and monitoring client behavior. |
-| `querylog_interval` | `90d` | Retention period for query logs. Reduce to `7d` if disk space is limited (LXC is 4 GB). |
-| `statistics_interval` | `7d` | Time range displayed in the dashboard statistics. |
+| `querylog.enabled` | `true` | Logs every DNS query. Useful for diagnostics and monitoring client behavior. |
+| `querylog.interval` | `2160h` (90d) | Retention period for query logs. Reduce to `168h` (7d) if disk space is limited. |
+| `querylog.file_enabled` | `true` | Persist query log to disk (not just memory). |
+| `statistics.enabled` | `true` | Enable dashboard statistics. |
+| `statistics.interval` | `24h` | Time range displayed in the dashboard statistics. |
 
 ---
 

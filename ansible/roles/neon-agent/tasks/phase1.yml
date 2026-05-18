@@ -92,6 +92,7 @@
     owner: root
     group: neonuser
     mode: "0640"
+  no_log: true   # template renders vault_smtp_password
 
 - name: Ensure msmtp log file exists
   file:
@@ -231,6 +232,7 @@
     owner: root
     group: root
     mode: "0600"
+  no_log: true   # renders JWT_SECRET, SMTP password
   notify: restart multica
 
 - name: Pull Multica images
@@ -344,3 +346,4 @@
     owner: root
     group: neonuser
     mode: "0640"
+  no_log: true   # renders vault_claude_oauth_token (+ MULTICA_TOKEN if defined)

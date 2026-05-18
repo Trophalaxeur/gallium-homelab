@@ -1,4 +1,7 @@
 ---
+# Required collections (install once on the control node):
+#   ansible-galaxy collection install -r ansible/requirements.yml
+
 - name: Deploy AdGuard Home
   hosts: adguard
   become: true
@@ -30,7 +33,7 @@
 - name: Deploy neon agent platform
   hosts: neon
   become: true
-  gather_facts: true
+  gather_facts: false   # gather AFTER known_hosts pre_task to avoid TOFU on first run
 
   # Phase 1 (before Manual Setup): ansible-playbook playbook.yml --tags phase1
   # Phase 2 (after  Manual Setup): ansible-playbook playbook.yml --tags phase2
@@ -53,6 +56,9 @@
         state: present
       delegate_to: localhost
       become: false
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
 
   roles:
     - neon-agent

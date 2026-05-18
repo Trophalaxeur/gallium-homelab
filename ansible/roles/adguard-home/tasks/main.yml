@@ -45,8 +45,10 @@
     version: "3.1.3"
     force: false
 
+# --nocron prevents acme.sh from installing its own cron entry.
+# We manage renewal scheduling explicitly via Ansible (below) for visibility.
 - name: Install acme.sh from source
-  shell: ./acme.sh --install --home /root/.acme.sh
+  shell: ./acme.sh --install --home /root/.acme.sh --nocron
   args:
     chdir: /tmp/acme.sh-src
     creates: /root/.acme.sh/acme.sh
@@ -83,6 +85,7 @@
     src: adguard-home.yaml.j2
     dest: /opt/AdGuardHome/AdGuardHome.yaml
     mode: "0600"
+  no_log: true   # embeds adguard_admin_password_hash
   notify: restart adguardhome
 
 - name: Install AdGuard Home as systemd service
