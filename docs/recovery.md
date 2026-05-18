@@ -14,6 +14,12 @@ This document lists every secret used in this project, where it lives, and how t
 | `root_password` | `terraform/terraform.tfvars` | No (gitignored) |
 | AdGuard admin password (plaintext) | Password manager only | No |
 | AdGuard admin password hash (bcrypt) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `online_api_key` (acme.sh DNS-01) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_smtp_password` (Gmail App Password) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_claude_oauth_token` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_multica_jwt_secret` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_gh_admin_token` (PAT, deploy key registration only) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_multica_pat` (added after Manual Setup) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | ansible-vault password | Password manager only | No |
 
 ---
@@ -57,6 +63,20 @@ Then re-run the playbook to apply the new password:
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/playbook.yml --ask-vault-pass
 ```
+
+### `online_api_key` lost
+
+Generate a new API key in the Online.net console (Account → API keys) and update `vault.yml` via `ansible-vault edit`. acme.sh will pick it up on the next renewal cron run.
+
+### Neon vault secrets lost
+
+| Secret | How to regenerate |
+|---|---|
+| `vault_smtp_password` | Generate a new Gmail App Password (Google Account → Security → 2-step verification → App passwords). |
+| `vault_claude_oauth_token` | Run `claude setup-token` on your local machine where Claude Code is logged in. |
+| `vault_multica_jwt_secret` | `openssl rand -hex 32`. ⚠️ Rotating invalidates all active Multica sessions and PATs. |
+| `vault_gh_admin_token` | GitHub → Settings → Developer settings → PAT (classic) → scope `repo`. Used once for deploy key registration; can be deleted after Phase 1. |
+| `vault_multica_pat` | Generate a new PAT in the Multica UI (Settings → Personal Access Tokens). Update vault, then `ansible-playbook --tags phase2`. |
 
 ### SSH key lost
 

@@ -67,11 +67,12 @@ pveum acl delete / --user terraform@pve --roles PVEAdmin
 ```hcl
 provider "proxmox" {
   endpoint  = "https://<PROXMOX_IP>:8006"
-  username  = "terraform@pve!terraform_token"
-  api_token = "<UUID_SECRET>"
+  api_token = "terraform@pve!terraform_token=<UUID_SECRET>"
   insecure  = true  # self-signed certificate
 }
 ```
+
+The `bpg/proxmox` provider expects `api_token` as a single string in the format `<token_id>=<secret>`. The repo's `terraform/main.tf` builds this via `"${var.proxmox_token_id}=${var.proxmox_api_token}"`.
 
 ---
 

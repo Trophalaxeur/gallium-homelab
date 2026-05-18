@@ -72,6 +72,7 @@
   register: acme_issue
   failed_when: acme_issue.rc not in [0, 2]
   changed_when: acme_issue.rc == 0
+  no_log: true
   args:
     creates: /root/.acme.sh/{{ adguard_domain }}_ecc/{{ adguard_domain }}.cer
 
