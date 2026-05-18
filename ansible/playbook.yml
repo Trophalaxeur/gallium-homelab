@@ -16,6 +16,7 @@
     # recording multiple key types unexpectedly.
     # For higher-security contexts: pin expected fingerprints out-of-band
     # (Proxmox console → check /etc/ssh/ssh_host_ed25519_key.pub).
+    # 'always' tag ensures known_hosts + fact gathering run even with --tags filters.
     - name: Accept host key
       ansible.builtin.known_hosts:
         name: "{{ ansible_host }}"
@@ -23,9 +24,11 @@
         state: present
       delegate_to: localhost
       become: false
+      tags: always
 
     - name: Gather facts
       ansible.builtin.gather_facts:
+      tags: always
 
   roles:
     - adguard-home
@@ -49,6 +52,8 @@
     # recording multiple key types unexpectedly.
     # For higher-security contexts: pin expected fingerprints out-of-band
     # (Proxmox console → check /etc/ssh/ssh_host_ed25519_key.pub).
+    # 'always' tag ensures these run even under --tags phase1/phase2 filters
+    # (without it, --tags phase1 would skip pre_tasks → SSH/facts broken).
     - name: Accept host key
       ansible.builtin.known_hosts:
         name: "{{ ansible_host }}"
@@ -56,9 +61,11 @@
         state: present
       delegate_to: localhost
       become: false
+      tags: always
 
     - name: Gather facts
       ansible.builtin.gather_facts:
+      tags: always
 
   roles:
     - neon-agent
