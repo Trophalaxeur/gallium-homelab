@@ -163,7 +163,7 @@
 
 - name: Initialize RTK Claude Code hook for neonuser
   become_user: neonuser
-  shell: /home/neonuser/.local/bin/rtk init -g
+  command: /home/neonuser/.local/bin/rtk init -g
   args:
     creates: /home/neonuser/.claude/RTK.md
 
@@ -343,6 +343,9 @@
 
 # Clones use per-repo SSH host aliases (defined in ~/.ssh/config) so each
 # repo authenticates with its own deploy key.
+# force: true ensures idempotency — these working trees are managed exclusively
+# by Ansible; any local modifications would be hotfixes that must be committed
+# and pushed upstream before the next run.
 - name: Clone neon-agents to /opt/neon-agents
   become_user: neonuser
   git:
