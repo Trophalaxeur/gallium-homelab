@@ -18,7 +18,7 @@ ssh_public_key = "ssh-ed25519 AAAA..."
 
 neon_vmid          = 101
 neon_ip            = "192.168.1.60"
-neon_lxc_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+neon_lxc_template  = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 
 # Secrets — ne jamais committer terraform.tfvars
 proxmox_api_token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
