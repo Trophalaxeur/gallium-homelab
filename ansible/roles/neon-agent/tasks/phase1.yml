@@ -78,6 +78,7 @@
       - cron
       - logrotate
       - curl
+      - sudo
       - mailutils
       - msmtp
       - yq
@@ -131,7 +132,7 @@
     url: https://raw.githubusercontent.com/multica-ai/multica/refs/tags/v0.3.2/scripts/install.sh
     dest: /tmp/multica-install.sh
     mode: "0755"
-    checksum: "sha256:20cf22bb5324e868f081aeaa669267aaecff1949ca29c21996323bd3fa138870"
+    checksum: "sha256:9e82feee4e3e9a2a63f99d1e674fa9b6b2ef4d8001572a14125d325fc16bf055"
 
 - name: Install multica CLI
   command: /tmp/multica-install.sh
@@ -144,7 +145,7 @@
     url: https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh
     dest: /tmp/rtk-install.sh
     mode: "0755"
-    checksum: "sha256:09f3d9b5543f772895f5cb0c66dc93602be451bb09fbd220bba185c4a14cd88d"
+    checksum: "sha256:0c46611d70d0eee64c43c6398f8b1fe057b7f0b052810bbeec09288898ba9a46"
 
 - name: Install RTK (token-optimization proxy)
   become_user: neonuser
@@ -152,11 +153,36 @@
   args:
     creates: /home/neonuser/.local/bin/rtk
 
+- name: Ensure neonuser Claude config dir exists
+  file:
+    path: /home/neonuser/.claude
+    state: directory
+    owner: neonuser
+    group: neonuser
+    mode: "0700"
+
 - name: Initialize RTK Claude Code hook for neonuser
   become_user: neonuser
-  shell: /home/neonuser/.local/bin/rtk init -g
+  command: /home/neonuser/.local/bin/rtk init -g
   args:
-    creates: /home/neonuser/.claude/settings.json
+    creates: /home/neonuser/.claude/RTK.md
+
+- name: Deploy Claude Code settings with RTK hook
+  copy:
+    dest: /home/neonuser/.claude/settings.json
+    owner: neonuser
+    group: neonuser
+    mode: "0600"
+    force: false
+    content: |
+      {
+        "hooks": {
+          "PreToolUse": [{
+            "matcher": "Bash",
+            "hooks": [{ "type": "command", "command": "rtk hook claude" }]
+          }]
+        }
+      }
 
 # SSH access — authorize Thallium's key for neonuser
 # root access is already handled by Terraform via user_account.keys
@@ -317,29 +343,36 @@
 
 # Clones use per-repo SSH host aliases (defined in ~/.ssh/config) so each
 # repo authenticates with its own deploy key.
+# force: true ensures idempotency — these working trees are managed exclusively
+# by Ansible; any local modifications would be hotfixes that must be committed
+# and pushed upstream before the next run.
 - name: Clone neon-agents to /opt/neon-agents
   become_user: neonuser
   git:
     repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
     dest: /opt/neon-agents
+    force: true
 
 - name: Clone neon-agents to context repos
   become_user: neonuser
   git:
     repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/neon-agents
+    force: true
 
 - name: Clone homelab-gallium to context repos
   become_user: neonuser
   git:
     repo: git@homelab-gallium.github.com:Trophalaxeur/homelab-gallium.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/homelab-gallium
+    force: true
 
 - name: Clone bismuth-blog to context repos
   become_user: neonuser
   git:
     repo: git@bismuth-blog.github.com:Trophalaxeur/bismuth-blog.git
     dest: /home/neonuser/.neon/repos/Trophalaxeur/bismuth-blog
+    force: true
 
 # Step 12 — Initial context build
 - name: Build initial context (force)

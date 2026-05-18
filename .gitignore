@@ -14,5 +14,5 @@ ansible/.vault_pass
 .DS_Store
 *.log
 docs/next-steps.md
-docs/diary.md
+docs/diary/
 stories/*

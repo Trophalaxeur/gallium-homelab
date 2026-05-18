@@ -53,8 +53,6 @@ resource "proxmox_virtual_environment_container" "neon" {
   startup {
     order = 2
   }
-
-  on_boot = true
 }
 
 output "neon_ip" {

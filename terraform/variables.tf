@@ -87,7 +87,7 @@ variable "neon_ip" {
 }
 
 variable "neon_lxc_template" {
-  description = "Template LXC pour neon (Debian 12 recommandé)"
+  description = "Template LXC pour neon (Debian 13 recommandé — seul template disponible sur gallium)"
   type        = string
-  default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
