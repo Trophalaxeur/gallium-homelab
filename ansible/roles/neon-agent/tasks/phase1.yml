@@ -179,6 +179,7 @@
       key: "{{ neon_deploy_pubkey.content | b64decode | trim }}"
       read_only: true
     status_code: [201, 422]   # 422 = key already exists
+  no_log: true
 
 - name: Register deploy key on homelab-gallium
   uri:

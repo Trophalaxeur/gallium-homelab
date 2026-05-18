@@ -14,4 +14,7 @@ smtp_user: "neon@flefevre.fr"
 smtp_from: "neon@flefevre.fr"
 neon_admin_email: "admin@flefevre.fr"
 multica_allowed_emails: "me@flefevre.fr"
-multica_tag: "latest"   # pin to a specific release tag at deploy time
+multica_tag: "main"     # default branch; override with a specific release tag at deploy time
+
+# Admin SSH public key — used by Ansible to authorize neonuser (Terraform handles root)
+ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+tX7HsjNAPltIWdXTp flefevre@thallium"
