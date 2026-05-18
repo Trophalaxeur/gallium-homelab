@@ -1,0 +1,7 @@
+---
+# Vault vars required (add via `ansible-vault edit group_vars/all/vault.yml`):
+#   vault_smtp_password        — SMTP account password
+#   vault_claude_oauth_token   — generated with `claude setup-token` on local machine
+#   vault_multica_jwt_secret   — generated with `openssl rand -hex 32`, store once
+#   vault_multica_pat          — generated in Multica UI after Manual Setup (Phase 2 only)
+#   vault_gh_admin_token       — GitHub PAT with repo:admin scope (deploy key registration)

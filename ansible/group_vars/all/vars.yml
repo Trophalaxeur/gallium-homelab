@@ -2,6 +2,16 @@
 proxmox_ip: "192.168.1.32"
 adguard_ip: "192.168.1.53"
 thallium_ip: "192.168.1.20"
+neon_ip: "192.168.1.60"
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
+
+# --- neon ---
+smtp_host: "smtp.example.com"
+smtp_port: 587
+smtp_user: "neon@flefevre.fr"
+smtp_from: "neon@flefevre.fr"
+neon_admin_email: "admin@flefevre.fr"
+multica_allowed_emails: "contact@flefevre.fr"
+multica_tag: "latest"   # pin to a specific release tag at deploy time

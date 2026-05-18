@@ -61,3 +61,23 @@ variable "ssh_public_key" {
   description = "Clé SSH publique pour accès root au LXC"
   type        = string
 }
+
+# --- neon ---
+
+variable "neon_vmid" {
+  description = "VMID du conteneur neon"
+  type        = number
+  default     = 101
+}
+
+variable "neon_ip" {
+  description = "IP statique du LXC neon"
+  type        = string
+  default     = "192.168.1.60"
+}
+
+variable "neon_lxc_template" {
+  description = "Template LXC pour neon (Debian 12 recommandé)"
+  type        = string
+  default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+}

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+BACKUP_DIR=/home/neonuser/.neon/backups/postgres
+KEEP_DAYS=14
+ADMIN_EMAIL="${NEON_ADMIN_EMAIL:-{{ neon_admin_email | default('admin@flefevre.fr') }}}"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+DUMP_FILE="$BACKUP_DIR/multica-$TIMESTAMP.sql.gz"
+
+trap 'echo "pg_backup failed at $(date)" | mail -s "[neon] pg_backup FAILED" "$ADMIN_EMAIL"' ERR
+
+[ -d "$BACKUP_DIR" ] || { echo "$BACKUP_DIR missing"; exit 1; }
+
+docker compose -f /opt/multica/docker-compose.selfhost.yml exec -T postgres \
+  pg_dump -U multica multica | gzip > "$DUMP_FILE"
+
+chown neonuser:neonuser "$DUMP_FILE"
+chmod 0640 "$DUMP_FILE"
+
+find "$BACKUP_DIR" -name "multica-*.sql.gz" -mtime +$KEEP_DAYS -delete
+
+echo "[$(date)] Backup created: $DUMP_FILE ($(du -h "$DUMP_FILE" | cut -f1))" \
+  >> /home/neonuser/.neon/logs/pg-backup-$(date +%Y%m).log

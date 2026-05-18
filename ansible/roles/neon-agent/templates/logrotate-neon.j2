@@ -1,0 +1,24 @@
+/home/neonuser/.neon/logs/*.log {
+  daily
+  rotate 14
+  compress
+  missingok
+  notifempty
+}
+
+/home/neonuser/.multica/daemon.log {
+  weekly
+  rotate 8
+  compress
+  missingok
+  notifempty
+  copytruncate
+}
+
+/var/log/msmtp.log {
+  monthly
+  rotate 6
+  compress
+  missingok
+  notifempty
+}
