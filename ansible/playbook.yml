@@ -37,8 +37,8 @@
   become: true
   gather_facts: false   # gather AFTER known_hosts pre_task to avoid TOFU on first run
 
-  # Phase 1 (before Manual Setup): ansible-playbook playbook.yml --tags phase1
-  # Phase 2 (after  Manual Setup): ansible-playbook playbook.yml --tags phase2
+  # Phase 1 (infra + tooling): ansible-playbook playbook.yml --tags phase1
+  # Phase 2 (multica cloud auth + daemon): ansible-playbook playbook.yml --tags phase2
   #
   # Vault vars required — add via `ansible-vault edit group_vars/all/vault.yml`:
   #   vault_smtp_password, vault_claude_oauth_token

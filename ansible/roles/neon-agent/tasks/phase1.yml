@@ -44,25 +44,6 @@
       deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
     mode: "0644"
 
-- name: Add Docker signing key
-  get_url:
-    url: https://download.docker.com/linux/debian/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: "0644"
-    force: false
-
-- name: Detect Debian package architecture
-  command: dpkg --print-architecture
-  register: dpkg_arch
-  changed_when: false
-
-- name: Add Docker repo
-  copy:
-    dest: /etc/apt/sources.list.d/docker.list
-    content: |
-      deb [arch={{ dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
-    mode: "0644"
-
 # Step 3 — packages
 - name: Install packages
   apt:
@@ -70,11 +51,6 @@
       - nodejs
       - git
       - gh
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
       - cron
       - logrotate
       - curl
@@ -278,7 +254,7 @@
     - local_key_norm not in remote_keys_norm
   no_log: true
 
-# Step 10 — Runtime directories
+# Step 9 — Runtime directories
 - name: Create neon runtime directories
   file:
     path: "{{ item }}"
@@ -291,7 +267,7 @@
     - /home/neonuser/.neon/repos/Trophalaxeur
     - /home/neonuser/.neon/logs
 
-# Step 11 — Clone repos
+# Step 10 — Clone repos
 # /opt is root-owned; pre-create /opt/neon-agents with neonuser ownership
 # so the git clone (run as neonuser) can write into it.
 - name: Create /opt/neon-agents with neonuser ownership
@@ -335,14 +311,14 @@
     dest: /home/neonuser/.neon/repos/Trophalaxeur/bismuth-blog
     force: true
 
-# Step 12 — Initial context build
+# Step 11 — Initial context build
 - name: Build initial context (force)
   become_user: neonuser
   command: bash /opt/neon-agents/scheduler/context-nightly.sh --force
   args:
     creates: /home/neonuser/.neon/context/neon-agents/context.md
 
-# Step 13 — Cron context-nightly
+# Step 12 — Cron context-nightly
 - name: Deploy context-nightly cron
   template:
     src: cron-context.j2
@@ -351,7 +327,7 @@
     group: root
     mode: "0644"
 
-# Step 14 — logrotate
+# Step 13 — logrotate
 - name: Deploy logrotate config
   template:
     src: logrotate-neon.j2
@@ -360,7 +336,7 @@
     group: root
     mode: "0644"
 
-# Step 15 — /etc/neon.env (Phase 1 — no MULTICA_TOKEN yet)
+# Step 14 — /etc/neon.env (Phase 1 — no MULTICA_TOKEN yet)
 - name: Deploy /etc/neon.env
   template:
     src: neon-env.j2
