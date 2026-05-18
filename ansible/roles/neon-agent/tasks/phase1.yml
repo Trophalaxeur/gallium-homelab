@@ -51,13 +51,17 @@
     mode: "0644"
     force: false
 
+- name: Detect Debian package architecture
+  command: dpkg --print-architecture
+  register: dpkg_arch
+  changed_when: false
+
 - name: Add Docker repo
-  shell: |
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-      https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-      > /etc/apt/sources.list.d/docker.list
-  args:
-    creates: /etc/apt/sources.list.d/docker.list
+  copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: |
+      deb [arch={{ dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+    mode: "0644"
 
 # Step 3 — packages
 - name: Install packages

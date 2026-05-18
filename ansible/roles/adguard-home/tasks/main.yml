@@ -1,7 +1,7 @@
 ---
 - name: Install dependencies
   apt:
-    name: [curl, git, tar, socat, openssl, cron]
+    name: [curl, git, tar, socat, openssl, cron, logrotate]
     state: present
     update_cache: true
 
