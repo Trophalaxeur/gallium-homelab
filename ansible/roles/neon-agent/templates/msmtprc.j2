@@ -1,0 +1,12 @@
+defaults
+  auth           on
+  tls            on
+  tls_trust_file /etc/ssl/certs/ca-certificates.crt
+  logfile        /var/log/msmtp.log
+
+account default
+  host           {{ smtp_host }}
+  port           {{ smtp_port | default(587) }}
+  from           {{ smtp_from | default('neon@flefevre.fr') }}
+  user           {{ smtp_user }}
+  password       {{ vault_smtp_password }}

@@ -1,0 +1,8 @@
+{% for repo in deploy_key_repos %}
+Host {{ repo }}.github.com
+  HostName github.com
+  HostKeyAlias github.com
+  IdentityFile /home/neonuser/.ssh/neon_deploy_{{ repo }}
+  IdentitiesOnly yes
+
+{% endfor %}

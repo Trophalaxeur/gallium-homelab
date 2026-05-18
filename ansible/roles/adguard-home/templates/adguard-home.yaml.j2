@@ -1,5 +1,6 @@
-bind_host: 0.0.0.0
-bind_port: 3000
+http:
+  address: 0.0.0.0:3000
+  session_ttl: 720h
 
 users:
   - name: "{{ adguard_admin_user }}"
@@ -7,7 +8,6 @@ users:
 
 auth_attempts: 5
 block_auth_min: 15
-http_proxy: ""
 language: fr
 theme: auto
 
@@ -15,42 +15,38 @@ dns:
   bind_hosts:
     - 0.0.0.0
   port: 53
-
   upstream_dns:
     - https://dns10.quad9.net/dns-query
     - https://dns.cloudflare.com/dns-query
   bootstrap_dns:
     - 9.9.9.9
     - 1.1.1.1
-
-  protection_enabled: true
-  blocking_mode: default
   ratelimit: 20
   refuse_any: true
-
+  cache_enabled: true
   cache_size: 4194304
   cache_optimistic: true
-
   enable_dnssec: false
+  hostsfile_enabled: true
+  serve_plain_dns: true
 
-  filtering_enabled: true
-  filters_update_interval: 24
+tls:
+  enabled: true
+  server_name: "{{ adguard_domain }}"
+  port_https: 443
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  certificate_path: "/opt/AdGuardHome/cert/cert.pem"
+  private_key_path: "/opt/AdGuardHome/cert/key.pem"
 
-  querylog_enabled: true
-  querylog_interval: 90d
-  statistics_interval: 7d
+querylog:
+  interval: 2160h
+  enabled: true
+  file_enabled: true
 
-  # Enregistrements DNS locaux
-  rewrites:
-    - domain: proxmox.lan
-      answer: "{{ proxmox_ip }}"
-    - domain: adguard.lan
-      answer: "{{ adguard_ip }}"
-
-  blocked_services:
-    schedule:
-      time_zone: Europe/Paris
-    ids: []
+statistics:
+  interval: 24h
+  enabled: true
 
 filters:
   - enabled: true
@@ -64,13 +60,41 @@ filters:
 
 dhcp:
   enabled: false
-  interface_name: ""
   local_domain_name: lan
 
-tls:
-  enabled: false
+filtering:
+  blocking_mode: default
+  filtering_enabled: true
+  rewrites_enabled: true
+  protection_enabled: true
+  rewrites:
+    - domain: proxmox.lan
+      answer: "{{ proxmox_ip }}"
+      enabled: true
+    - domain: proxmox.flefevre.fr
+      answer: "{{ proxmox_ip }}"
+      enabled: true
+    - domain: adguard.lan
+      answer: "{{ adguard_ip }}"
+      enabled: true
+    - domain: adguard.flefevre.fr
+      answer: "{{ adguard_ip }}"
+      enabled: true
+    - domain: thallium.lan
+      answer: "{{ thallium_ip }}"
+      enabled: true
+    - domain: neon.lan
+      answer: "{{ neon_ip }}"
+      enabled: true
+    - domain: neon.flefevre.fr
+      answer: "{{ neon_ip }}"
+      enabled: true
+  blocked_services:
+    schedule:
+      time_zone: Europe/Paris
+    ids: []
 
 log:
   verbose: false
 
-schema_version: 28
+schema_version: 34

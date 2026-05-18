@@ -1,0 +1,6 @@
+---
+- import_tasks: phase1.yml
+  tags: [phase1]
+
+- import_tasks: phase2.yml
+  tags: [phase2]

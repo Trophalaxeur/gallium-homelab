@@ -1,7 +1,7 @@
 ---
 - name: Install dependencies
   apt:
-    name: [curl, tar]
+    name: [curl, git, tar, socat, openssl, cron, logrotate]
     state: present
     update_cache: true
 
@@ -30,17 +30,83 @@
     mode: "0755"
     remote_src: true
 
-- name: Deploy configuration
+# Certificates are provisioned BEFORE deploying config + starting service,
+# so AdGuard finds valid TLS material on first start (no degraded HTTP-only run).
+- name: Create cert directory
+  file:
+    path: /opt/AdGuardHome/cert
+    state: directory
+    mode: "0750"
+
+- name: Clone acme.sh (pinned)
+  git:
+    repo: https://github.com/acmesh-official/acme.sh.git
+    dest: /tmp/acme.sh-src
+    version: "3.1.3"
+    force: false
+
+# --nocron prevents acme.sh from installing its own cron entry.
+# We manage renewal scheduling explicitly via Ansible (below) for visibility.
+- name: Install acme.sh from source
+  shell: ./acme.sh --install --home /root/.acme.sh --nocron
+  args:
+    chdir: /tmp/acme.sh-src
+    creates: /root/.acme.sh/acme.sh
+  environment:
+    HOME: /root
+
+- name: Register acme.sh account email
+  command: /root/.acme.sh/acme.sh --register-account -m {{ acme_email }} --server letsencrypt
+  environment:
+    HOME: /root
+  args:
+    creates: /root/.acme.sh/ca/acme-v02.api.letsencrypt.org/directory/account.json
+
+- name: Issue certificate for {{ adguard_domain }}
+  command: >
+    /root/.acme.sh/acme.sh --issue
+    -d {{ adguard_domain }}
+    --dns dns_online
+    --server letsencrypt
+    --accountemail {{ acme_email }}
+    --keylength ec-256
+  environment:
+    HOME: /root
+    ONLINE_API_KEY: "{{ online_api_key }}"
+  register: acme_issue
+  failed_when: acme_issue.rc not in [0, 2]
+  changed_when: acme_issue.rc == 0
+  no_log: true
+  args:
+    creates: /root/.acme.sh/{{ adguard_domain }}_ecc/{{ adguard_domain }}.cer
+
+- name: Deploy AdGuard configuration
   template:
     src: adguard-home.yaml.j2
     dest: /opt/AdGuardHome/AdGuardHome.yaml
     mode: "0600"
+  no_log: true   # embeds adguard_admin_password_hash
   notify: restart adguardhome
 
-- name: Install AdGuard Home as service systemd
+- name: Install AdGuard Home as systemd service
   command: /opt/AdGuardHome/AdGuardHome -s install
   args:
     creates: /etc/systemd/system/AdGuardHome.service
+
+# Cert install runs the reloadcmd (systemctl restart) — this is what starts
+# AdGuard for the first time, with valid cert files already in place.
+- name: Install certificate to AdGuard cert directory
+  command: >
+    /root/.acme.sh/acme.sh --install-cert
+    --ecc
+    -d {{ adguard_domain }}
+    --fullchain-file /opt/AdGuardHome/cert/cert.pem
+    --key-file /opt/AdGuardHome/cert/key.pem
+    --reloadcmd "systemctl restart AdGuardHome"
+  environment:
+    HOME: /root
+  args:
+    creates: /opt/AdGuardHome/cert/cert.pem
 
 - name: Ensure AdGuard Home is started and enabled
   systemd:
@@ -48,6 +114,28 @@
     state: started
     enabled: true
     daemon_reload: true
+
+# Log to /var/log so renewal failures are observable; rotated by logrotate task below.
+- name: Set up acme.sh cron for auto-renewal
+  cron:
+    name: "acme.sh renewal"
+    minute: "0"
+    hour: "0"
+    job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh >> /var/log/acme-renewal.log 2>&1'
+
+- name: Configure logrotate for acme.sh renewal log
+  copy:
+    dest: /etc/logrotate.d/acme-renewal
+    content: |
+      /var/log/acme-renewal.log {
+        monthly
+        rotate 6
+        compress
+        missingok
+        notifempty
+        create 0640 root adm
+      }
+    mode: "0644"
 
 - name: Flush handlers
   meta: flush_handlers

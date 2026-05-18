@@ -1,5 +1,5 @@
 proxmox_endpoint = "https://<PROXMOX_IP>:8006"
-proxmox_username = "terraform@pve"
+proxmox_token_id = "terraform@pve!terraform_token"
 proxmox_node     = "gallium"
 proxmox_ip       = "<PROXMOX_IP>"
 
@@ -7,11 +7,19 @@ adguard_ip   = "192.168.1.53"
 adguard_vmid = 100
 gateway      = "192.168.1.1"
 
-# Vérifier le nom exact : ls /var/lib/vz/template/cache/ sur Proxmox
-lxc_template = "local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst"
+lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
+# Proxmox storage pool for LXC disks.
+# Use "local-zfs" if you have a ZFS pool, "local-lvm" otherwise.
+# ⚠️ Changing this for an existing LXC triggers a ForceNew (container recreated).
+lxc_datastore = "local-zfs"
 
 ssh_public_key = "ssh-ed25519 AAAA..."
 
+neon_vmid          = 101
+neon_ip            = "192.168.1.60"
+neon_lxc_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+
 # Secrets — ne jamais committer terraform.tfvars
-proxmox_password = ""
-root_password    = ""
+proxmox_api_token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+root_password     = ""

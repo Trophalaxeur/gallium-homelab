@@ -1,0 +1,54 @@
+---
+# Step 18 — multica CLI config
+- name: Configure multica CLI for neonuser (self-host URL)
+  become_user: neonuser
+  command: >
+    multica setup self-host
+    --server-url http://localhost:8080
+    --app-url http://localhost:3000
+  args:
+    creates: /home/neonuser/.multica/config.json
+
+# Idempotent login: check auth status first, only login if not already logged in.
+- name: Check multica CLI auth status
+  become_user: neonuser
+  command: multica auth status
+  register: multica_auth
+  failed_when: false
+  changed_when: false
+
+- name: Log in multica CLI with PAT
+  become_user: neonuser
+  command: multica login --token {{ vault_multica_pat }}
+  no_log: true
+  when: multica_auth.rc != 0
+
+# Step 19 — re-deploy /etc/neon.env with MULTICA_TOKEN
+# The template includes MULTICA_TOKEN conditionally when vault_multica_pat is defined.
+# Re-running Phase 1 after this point preserves the token (single source of truth).
+- name: Re-deploy /etc/neon.env with MULTICA_TOKEN
+  template:
+    src: neon-env.j2
+    dest: /etc/neon.env
+    owner: root
+    group: neonuser
+    mode: "0640"
+  no_log: true
+  notify: restart multica-daemon
+
+# Step 20 — systemd daemon service
+- name: Deploy multica-daemon systemd service
+  template:
+    src: multica-daemon.service.j2
+    dest: /etc/systemd/system/multica-daemon.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload systemd
+
+- name: Enable and start multica-daemon
+  systemd:
+    name: multica-daemon
+    state: started
+    enabled: true
+    daemon_reload: true

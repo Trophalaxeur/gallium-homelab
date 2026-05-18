@@ -1,0 +1,395 @@
+---
+# Step 1 — neonuser
+- name: Create neonuser
+  user:
+    name: neonuser
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+# Step 2 — external repos
+# Use signed APT keys + explicit sources rather than `curl | bash` setup scripts
+# (no arbitrary remote code execution at deploy time).
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add NodeSource signing key
+  get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/nodesource.asc
+    mode: "0644"
+    force: false
+
+- name: Add NodeSource APT repo (Node 20 LTS)
+  copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_20.x nodistro main
+    mode: "0644"
+
+- name: Add GitHub CLI signing key
+  get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
+    mode: "0644"
+    force: false
+
+- name: Add GitHub CLI repo
+  copy:
+    dest: /etc/apt/sources.list.d/github-cli.list
+    content: |
+      deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
+    mode: "0644"
+
+- name: Add Docker signing key
+  get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+    force: false
+
+- name: Detect Debian package architecture
+  command: dpkg --print-architecture
+  register: dpkg_arch
+  changed_when: false
+
+- name: Add Docker repo
+  copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    content: |
+      deb [arch={{ dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+    mode: "0644"
+
+# Step 3 — packages
+- name: Install packages
+  apt:
+    name:
+      - nodejs
+      - git
+      - gh
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      - cron
+      - logrotate
+      - curl
+      - mailutils
+      - msmtp
+      - yq
+    state: present
+    update_cache: true
+
+# Step 4 — Claude Code
+- name: Install Claude Code
+  npm:
+    name: "@anthropic-ai/claude-code"
+    global: true
+    state: present
+
+# Step 5 — repomix
+- name: Install repomix
+  npm:
+    name: repomix
+    global: true
+    state: present
+
+# Step 6 — msmtp
+- name: Deploy msmtp config
+  template:
+    src: msmtprc.j2
+    dest: /etc/msmtprc
+    owner: root
+    group: neonuser
+    mode: "0640"
+  no_log: true   # template renders vault_smtp_password
+
+- name: Ensure msmtp log file exists
+  file:
+    path: /var/log/msmtp.log
+    state: touch
+    owner: neonuser
+    group: neonuser
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Set sendmail symlink to msmtp
+  file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+    force: true
+
+# Step 7 — multica CLI (pinned tag + sha256 checksum)
+- name: Download multica CLI install script (verified)
+  get_url:
+    url: https://raw.githubusercontent.com/multica-ai/multica/refs/tags/v0.3.2/scripts/install.sh
+    dest: /tmp/multica-install.sh
+    mode: "0755"
+    checksum: "sha256:20cf22bb5324e868f081aeaa669267aaecff1949ca29c21996323bd3fa138870"
+
+- name: Install multica CLI
+  command: /tmp/multica-install.sh
+  args:
+    creates: /usr/local/bin/multica
+
+# Step 7b — RTK (pinned tag + sha256 checksum)
+- name: Download RTK install script (verified)
+  get_url:
+    url: https://raw.githubusercontent.com/rtk-ai/rtk/refs/tags/v0.40.0/install.sh
+    dest: /tmp/rtk-install.sh
+    mode: "0755"
+    checksum: "sha256:09f3d9b5543f772895f5cb0c66dc93602be451bb09fbd220bba185c4a14cd88d"
+
+- name: Install RTK (token-optimization proxy)
+  become_user: neonuser
+  command: /tmp/rtk-install.sh
+  args:
+    creates: /home/neonuser/.local/bin/rtk
+
+- name: Initialize RTK Claude Code hook for neonuser
+  become_user: neonuser
+  shell: /home/neonuser/.local/bin/rtk init -g
+  args:
+    creates: /home/neonuser/.claude/settings.json
+
+# SSH access — authorize Thallium's key for neonuser
+# root access is already handled by Terraform via user_account.keys
+- name: Authorize Thallium SSH key for neonuser
+  ansible.posix.authorized_key:
+    user: neonuser
+    state: present
+    key: "{{ ssh_public_key }}"
+
+# Step 8 — SSH deploy keys (one per repo, GitHub limitation)
+- name: Create .ssh directory for neonuser
+  file:
+    path: /home/neonuser/.ssh
+    state: directory
+    owner: neonuser
+    group: neonuser
+    mode: "0700"
+
+- name: Generate SSH deploy key per repository
+  become_user: neonuser
+  command: >
+    ssh-keygen -t ed25519
+    -f /home/neonuser/.ssh/neon_deploy_{{ item }}
+    -N ""
+    -C "neon-deploy-{{ item }}"
+  args:
+    creates: /home/neonuser/.ssh/neon_deploy_{{ item }}
+  loop: "{{ deploy_key_repos }}"
+
+- name: Deploy SSH config (per-repo host aliases)
+  template:
+    src: ssh-config.j2
+    dest: /home/neonuser/.ssh/config
+    owner: neonuser
+    group: neonuser
+    mode: "0600"
+
+# Pinned ed25519 fingerprint from
+# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+- name: Authorize GitHub ed25519 host key for neonuser
+  become_user: neonuser
+  ansible.builtin.known_hosts:
+    name: github.com
+    key: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+    state: present
+    path: /home/neonuser/.ssh/known_hosts
+
+- name: Read deploy public keys
+  slurp:
+    src: /home/neonuser/.ssh/neon_deploy_{{ item }}.pub
+  register: deploy_pubkeys
+  loop: "{{ deploy_key_repos }}"
+
+# GET-then-POST: list existing keys on each repo, only POST if our pubkey is
+# missing. Avoids the 422 ambiguity — GitHub's "key is already in use" can
+# mean the key exists ANYWHERE (other repo / other user), not necessarily here.
+- name: List existing deploy keys per repository
+  uri:
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item.item }}/keys"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ vault_gh_admin_token }}"
+      Accept: application/vnd.github+json
+    status_code: 200
+  loop: "{{ deploy_pubkeys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: existing_repo_keys
+  no_log: true
+
+- name: Register deploy key on repos where it's missing
+  uri:
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item.0.item }}/keys"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ vault_gh_admin_token }}"
+      Accept: application/vnd.github+json
+    body_format: json
+    body:
+      title: "neon-deploy-{{ item.0.item }}-{{ ansible_hostname }}"
+      key: "{{ item.0.content | b64decode | trim }}"
+      read_only: true
+    status_code: 201
+  loop: "{{ deploy_pubkeys.results | zip(existing_repo_keys.results) | list }}"
+  loop_control:
+    label: "{{ item.0.item }}"
+  # Compare normalized keys: GitHub strips the trailing comment, so we strip
+  # ours too (keep only "algo base64", drop the "neon-deploy-..." suffix).
+  vars:
+    local_key_norm: "{{ item.0.content | b64decode | trim | regex_replace('^(\\S+\\s+\\S+).*', '\\1') }}"
+    remote_keys_norm: "{{ item.1.json | map(attribute='key') | map('regex_replace', '^(\\S+\\s+\\S+).*', '\\1') | list }}"
+  when:
+    - local_key_norm not in remote_keys_norm
+  no_log: true
+
+# Step 9 — Multica Docker Compose
+- name: Clone Multica repo
+  git:
+    repo: https://github.com/multica-ai/multica.git
+    dest: /opt/multica
+    version: "{{ multica_tag }}"
+    force: false
+
+- name: Deploy Multica .env
+  template:
+    src: multica-env.j2
+    dest: /opt/multica/.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true   # renders JWT_SECRET, SMTP password
+  notify: restart multica
+
+# apt installs docker-ce but doesn't start it; explicit start needed before
+# any docker compose / docker socket access works on a fresh Debian install.
+- name: Ensure Docker daemon is running and enabled
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Wait for Docker socket
+  wait_for:
+    path: /var/run/docker.sock
+    timeout: 30
+
+- name: Pull Multica images
+  community.docker.docker_compose_v2:
+    project_src: /opt/multica
+    files: [docker-compose.selfhost.yml]
+    state: present
+    pull: always
+
+# Step 10 — Runtime directories
+- name: Create neon runtime directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: neonuser
+    group: neonuser
+    mode: "0750"
+  loop:
+    - /home/neonuser/.neon/context
+    - /home/neonuser/.neon/repos/Trophalaxeur
+    - /home/neonuser/.neon/logs
+    - /home/neonuser/.neon/backups/postgres
+
+# Step 11 — Clone repos
+# /opt is root-owned; pre-create /opt/neon-agents with neonuser ownership
+# so the git clone (run as neonuser) can write into it.
+- name: Create /opt/neon-agents with neonuser ownership
+  file:
+    path: /opt/neon-agents
+    state: directory
+    owner: neonuser
+    group: neonuser
+    mode: "0755"
+
+# Clones use per-repo SSH host aliases (defined in ~/.ssh/config) so each
+# repo authenticates with its own deploy key.
+- name: Clone neon-agents to /opt/neon-agents
+  become_user: neonuser
+  git:
+    repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
+    dest: /opt/neon-agents
+
+- name: Clone neon-agents to context repos
+  become_user: neonuser
+  git:
+    repo: git@neon-agents.github.com:Trophalaxeur/neon-agents.git
+    dest: /home/neonuser/.neon/repos/Trophalaxeur/neon-agents
+
+- name: Clone homelab-gallium to context repos
+  become_user: neonuser
+  git:
+    repo: git@homelab-gallium.github.com:Trophalaxeur/homelab-gallium.git
+    dest: /home/neonuser/.neon/repos/Trophalaxeur/homelab-gallium
+
+- name: Clone bismuth-blog to context repos
+  become_user: neonuser
+  git:
+    repo: git@bismuth-blog.github.com:Trophalaxeur/bismuth-blog.git
+    dest: /home/neonuser/.neon/repos/Trophalaxeur/bismuth-blog
+
+# Step 12 — Initial context build
+- name: Build initial context (force)
+  become_user: neonuser
+  command: bash /opt/neon-agents/scheduler/context-nightly.sh --force
+  args:
+    creates: /home/neonuser/.neon/context/neon-agents/context.md
+
+# Step 13 — Cron context-nightly
+- name: Deploy context-nightly cron
+  template:
+    src: cron-context.j2
+    dest: /etc/cron.d/neon-context
+    owner: root
+    group: root
+    mode: "0644"
+
+# Step 14 — pg_dump script
+- name: Deploy pg_dump script
+  template:
+    src: neon-pg-backup.sh.j2
+    dest: /usr/local/sbin/neon-pg-backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+# Step 15 — pg_dump cron
+- name: Deploy pg_dump cron
+  template:
+    src: cron-pg-backup.j2
+    dest: /etc/cron.d/neon-pg-backup
+    owner: root
+    group: root
+    mode: "0644"
+
+# Step 16 — logrotate
+- name: Deploy logrotate config
+  template:
+    src: logrotate-neon.j2
+    dest: /etc/logrotate.d/neon
+    owner: root
+    group: root
+    mode: "0644"
+
+# Step 17 — /etc/neon.env (Phase 1 — no MULTICA_TOKEN yet)
+- name: Deploy /etc/neon.env
+  template:
+    src: neon-env.j2
+    dest: /etc/neon.env
+    owner: root
+    group: neonuser
+    mode: "0640"
+  no_log: true   # renders vault_claude_oauth_token (+ MULTICA_TOKEN if defined)
