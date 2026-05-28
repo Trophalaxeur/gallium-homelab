@@ -4,6 +4,16 @@
 - All folder names and unix paths must use kebab-case (e.g. `my-module`, not `MyModule` nor `my_module`).
 - Exception: paths dictated by third-party software (e.g. `/opt/AdGuardHome/`) must not be renamed.
 
+## Proxmox host constraints
+
+**Never install user services directly on the Proxmox host (192.168.1.32 / gallium).**
+The hypervisor must remain minimal — all services (reverse proxies, monitoring, databases, etc.)
+must run in LXC containers or VMs, not on the PVE host itself.
+
+This applies to nginx, Caddy, HAProxy, and any other application layer. If a service needs to
+be reachable via a domain, provision a dedicated LXC and update the AdGuard DNS rewrite to
+point to that LXC's IP.
+
 ## New VM / LXC checklist
 
 Each time a new VM or LXC is added to the homelab, apply these steps before considering it done:
