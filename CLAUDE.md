@@ -23,12 +23,6 @@ Each time a new VM or LXC is added to the homelab, apply these steps before cons
 3. **Terraform variables** — add `<vm>_ip` and `<vm>_vmid` to `variables.tf` and `terraform.tfvars.example`.
 4. **group_vars/all/vars.yml** — add `<vm>_ip` for use in templates.
 
-## New branch / session checklist
-
-Before starting work that touches shared files (playbook.yml, group_vars, inventory.ini, variables.tf):
-- Run `git status` first.
-- If there are uncommitted changes, ask before including them in the new branch.
-
 ## Next steps log
 At the end of each response, if the work session produced relevant next steps, update `docs/next-steps.md`.
 
