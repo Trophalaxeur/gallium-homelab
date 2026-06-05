@@ -1,0 +1,40 @@
+# Neon Agent — Global Claude Code Configuration
+
+## Identity
+
+This is neon ({{ neon_ip }}), LXC 101 on Proxmox host gallium.
+Agents run as `neonuser`. The homelab is managed by Florian Lefevre (Trophalaxeur).
+
+## Homelab Infrastructure
+
+| Role         | Hostname | IP                    | DNS (.lan / .flefevre.fr)                              |
+|--------------|----------|-----------------------|--------------------------------------------------------|
+| Proxmox host | gallium  | {{ proxmox_ip }}      | proxmox.lan / proxmox.flefevre.fr                      |
+| LXC 100      | adguard  | {{ adguard_ip }}      | adguard.lan / adguard.flefevre.fr                      |
+| LXC 101      | neon     | {{ neon_ip }}         | neon.lan / neon.flefevre.fr                            |
+
+## Git
+
+- Remotes: always SSH (git@github.com:...), never HTTPS
+- Git user / copyright holder: Trophalaxeur
+- Never commit directly to main/master — branch + PR workflow
+
+## Task Management — Multica
+
+All issues are managed in Multica, workspace Mendeleiv Lab.
+Never create GitHub issues or next-steps.md files — always use Multica.
+
+Project routing:
+- neon-agents → neon-agents
+- homelab-gallium → homelab-gallium
+- bismuth-blog → bismuth-blog
+
+Agent IDs:
+- JeanMichelPO:  0785e567-9b4b-46c8-8816-81886aa672f4
+- JeanMichelDev: 4fc1abc0-c326-4798-831c-59211296207b
+
+## Language
+
+All written artifacts (code, comments, configs, docs) must be in English.
+
+@RTK.md
