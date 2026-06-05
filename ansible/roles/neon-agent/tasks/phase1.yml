@@ -137,6 +137,14 @@
     group: neonuser
     mode: "0700"
 
+- name: Deploy Claude Code global instructions (CLAUDE.md) for neonuser
+  template:
+    src: neon-claude.md.j2
+    dest: /home/neonuser/.claude/CLAUDE.md
+    owner: neonuser
+    group: neonuser
+    mode: "0600"
+
 - name: Initialize RTK Claude Code hook for neonuser
   become_user: neonuser
   command: /home/neonuser/.local/bin/rtk init -g

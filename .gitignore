@@ -16,3 +16,4 @@ ansible/.vault_pass
 docs/next-steps.md
 docs/diary/
 stories/*
+repomix-output.xml
