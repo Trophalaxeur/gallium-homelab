@@ -1,3 +1,8 @@
+---
+title: "AdGuard Home Configuration"
+description: "DNS filtering and ad-blocking setup for the homelab network."
+---
+
 # AdGuard Home Configuration Reference
 
 ## Web Interface

@@ -1,3 +1,8 @@
+---
+title: "Decision Matrix: Claude Code vs GitHub Copilot"
+description: "Comparative evaluation of AI coding assistants for homelab infrastructure workflows."
+---
+
 # Matrice de décision : Claude Code vs GitHub Copilot Agent
 
 ## Contexte

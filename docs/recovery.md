@@ -1,3 +1,8 @@
+---
+title: "Secrets Inventory & Recovery Guide"
+description: "Complete inventory of all secrets and credentials, with step-by-step recovery procedures."
+---
+
 # Secrets Inventory & Recovery Guide
 
 This document lists every secret used in this project, where it lives, and how to recover it if lost.
