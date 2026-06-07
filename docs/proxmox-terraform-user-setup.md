@@ -1,3 +1,8 @@
+---
+title: "Proxmox Terraform Service Account Setup"
+description: "Creating a least-privilege Terraform service account on Proxmox with API token authentication."
+---
+
 # Proxmox — Terraform Service Account Setup
 
 Create a Terraform service account on Proxmox with a least-privilege custom role, authenticated via API token.
