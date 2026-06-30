@@ -305,11 +305,11 @@
     dest: /home/neonuser/.neon/repos/Trophalaxeur/neon-agents
     force: true
 
-- name: Clone homelab-gallium to context repos
+- name: Clone gallium-homelab to context repos
   become_user: neonuser
   git:
-    repo: git@homelab-gallium.github.com:Trophalaxeur/homelab-gallium.git
-    dest: /home/neonuser/.neon/repos/Trophalaxeur/homelab-gallium
+    repo: git@gallium-homelab.github.com:Trophalaxeur/gallium-homelab.git
+    dest: /home/neonuser/.neon/repos/Trophalaxeur/gallium-homelab
     force: true
 
 - name: Clone bismuth-blog to context repos

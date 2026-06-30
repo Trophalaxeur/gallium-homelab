@@ -5,5 +5,5 @@
 # Order matters only for readability — the play is fully idempotent.
 deploy_key_repos:
   - neon-agents
-  - homelab-gallium
+  - gallium-homelab
   - bismuth-blog
