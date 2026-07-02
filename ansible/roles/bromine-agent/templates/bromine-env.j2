@@ -1,0 +1,11 @@
+NODE_ENV=production
+PORT=3000
+ANTHROPIC_API_KEY={{ vault_anthropic_api_token }}
+GOOGLE_CLIENT_ID={{ vault_google_client_id }}
+GOOGLE_CLIENT_SECRET={{ vault_google_client_secret }}
+ALLOWED_EMAILS={{ vault_bromine_allowed_emails }}
+CONTENT_TOKEN={{ vault_gh_admin_token }}
+CARBON_NOTES_REPO_PATH=/home/bromineuser/repos/carbon-notes
+BISMUTH_BLOG_REPO_PATH=/home/bromineuser/repos/bismuth-blog
+BROMINE_ADMIN_EMAIL={{ bromine_admin_email | default('admin@flefevre.fr') }}
+PATH=/usr/local/bin:/usr/bin:/bin

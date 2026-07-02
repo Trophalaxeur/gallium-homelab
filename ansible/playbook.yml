@@ -68,3 +68,30 @@
 
   roles:
     - neon-agent
+
+- name: Deploy bromine CV-tailoring backend
+  hosts: bromine
+  become: true
+  gather_facts: false   # gather AFTER known_hosts pre_task to avoid TOFU on first run
+
+  # Vault vars required — add via `ansible-vault edit group_vars/all/vault.yml`:
+  #   vault_smtp_password, vault_gh_admin_token
+  #   vault_anthropic_api_token, vault_google_client_id, vault_google_client_secret
+  #   vault_bromine_allowed_emails
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  roles:
+    - bromine-agent

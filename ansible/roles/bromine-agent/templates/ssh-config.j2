@@ -1,0 +1,8 @@
+{% for repo in deploy_key_repos %}
+Host {{ repo }}.github.com
+  HostName github.com
+  HostKeyAlias github.com
+  IdentityFile /home/bromineuser/.ssh/bromine_deploy_{{ repo }}
+  IdentitiesOnly yes
+
+{% endfor %}

@@ -1,0 +1,10 @@
+---
+# Repos that need a GitHub deploy key on the bromine LXC.
+# carbon-notes needs read+write (tailored CV content commits); bismuth-blog
+# is read-only (cloned only to render PDFs via astro dev + Playwright).
+deploy_key_repos:
+  - carbon-notes
+  - bismuth-blog
+
+deploy_key_repos_write:
+  - carbon-notes

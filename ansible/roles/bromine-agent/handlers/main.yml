@@ -1,0 +1,6 @@
+---
+- name: Restart bromine-backend
+  systemd:
+    name: bromine-backend
+    state: restarted
+    daemon_reload: true

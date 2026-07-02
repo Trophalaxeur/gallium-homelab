@@ -3,6 +3,7 @@ proxmox_ip: "192.168.1.32"
 adguard_ip: "192.168.1.53"
 thallium_ip: "192.168.1.20"
 neon_ip: "192.168.1.60"
+bromine_ip: "192.168.1.61"
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
@@ -15,3 +16,7 @@ smtp_from: "neon@flefevre.fr"
 neon_admin_email: "admin@flefevre.fr"
 # Admin SSH public key — used by Ansible to authorize neonuser (Terraform handles root)
 ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+tX7HsjNAPltIWdXTp flefevre@thallium"
+
+# --- bromine ---
+bromine_admin_email: "admin@flefevre.fr"
+smtp_from_bromine: "bromine@flefevre.fr"

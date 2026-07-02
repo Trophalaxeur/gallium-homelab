@@ -91,3 +91,23 @@ variable "neon_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- bromine ---
+
+variable "bromine_vmid" {
+  description = "VMID du conteneur bromine"
+  type        = number
+  default     = 102
+}
+
+variable "bromine_ip" {
+  description = "IP statique du LXC bromine"
+  type        = string
+  default     = "192.168.1.61"
+}
+
+variable "bromine_lxc_template" {
+  description = "Template LXC pour bromine (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}
