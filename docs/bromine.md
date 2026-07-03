@@ -40,12 +40,11 @@ This creates an outbound-only connection to Cloudflare's edge — no port forwar
 
 ## Deploy keys
 
-Two GitHub deploy keys are generated on the LXC and registered automatically by the `bromine-agent` role:
+Three GitHub deploy keys are generated on the LXC and registered automatically by the `bromine-agent` role (one per repo, per-repo SSH host alias — see `deploy_key_repos` in `ansible/roles/bromine-agent/defaults/main.yml`):
 
 - `carbon-notes` — **read+write** (the backend commits tailored CV content on "Valider")
 - `bismuth-blog` — **read-only** (cloned only to render PDFs via `astro dev` + Playwright)
-
-`bromine-backend` itself is cloned via the admin SSH key (not a per-repo deploy key) since it's the code running on the box, not content it reads/writes.
+- `bromine-backend` — **read-only** (it's the code running on the box, not content it reads/writes)
 
 ## First-time setup order
 

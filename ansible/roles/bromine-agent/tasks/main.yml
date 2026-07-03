@@ -218,7 +218,7 @@
 - name: Clone bromine-backend to /opt/bromine-backend
   become_user: bromineuser
   git:
-    repo: git@github.com:Trophalaxeur/bromine-backend.git
+    repo: git@bromine-backend.github.com:Trophalaxeur/bromine-backend.git
     dest: /opt/bromine-backend
     force: true
   notify: Restart bromine-backend
