@@ -202,7 +202,6 @@
   command: npm ci
   args:
     chdir: /home/bromineuser/repos/bismuth-blog
-    creates: /home/bromineuser/repos/bismuth-blog/node_modules
 
 # Step 8 — bromine-backend itself
 # ⚠️ Requires the bromine-backend repo to already exist and be pushed to
@@ -222,19 +221,24 @@
     repo: git@github.com:Trophalaxeur/bromine-backend.git
     dest: /opt/bromine-backend
     force: true
+  notify: Restart bromine-backend
 
 - name: Install bromine-backend dependencies
   become_user: bromineuser
   command: npm ci
   args:
     chdir: /opt/bromine-backend
-    creates: /opt/bromine-backend/node_modules
 
-# Chromium system libraries + browser binary for the bromine-backend user.
-# --with-deps installs the Debian packages Chromium needs (fonts, libnss3, etc.)
-- name: Install Playwright Chromium + system dependencies
+# Chromium system libraries need root for apt-get install; the browser
+# binary itself is installed for bromineuser, who runs the service.
+- name: Install Playwright Chromium system dependencies
+  command: npx playwright install-deps chromium
+  args:
+    chdir: /opt/bromine-backend
+
+- name: Install Playwright Chromium browser
   become_user: bromineuser
-  command: npx playwright install --with-deps chromium
+  command: npx playwright install chromium
   args:
     chdir: /opt/bromine-backend
     creates: /home/bromineuser/.cache/ms-playwright
@@ -248,6 +252,7 @@
     group: bromineuser
     mode: "0640"
   no_log: true   # renders API keys / OAuth secrets
+  notify: Restart bromine-backend
 
 - name: Deploy bromine-backend systemd unit
   template:
