@@ -1,5 +1,8 @@
 NODE_ENV=production
 PORT=3000
+# Behind Caddy (TLS :443 → reverse_proxy → here) — bind loopback so :3000 isn't
+# reachable on the LAN and can't bypass TLS.
+BIND_HOST=127.0.0.1
 ANTHROPIC_API_KEY={{ vault_anthropic_api_token }}
 GOOGLE_CLIENT_ID={{ vault_google_client_id }}
 GOOGLE_CLIENT_SECRET={{ vault_google_client_secret }}

@@ -20,6 +20,7 @@ This document lists every secret used in this project, where it lives, and how t
 | AdGuard admin password (plaintext) | Password manager only | No |
 | AdGuard admin password hash (bcrypt) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `online_api_key` (acme.sh DNS-01) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_bromine_cert_deploy_ssh_key` (adguard→bromine cert push) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_smtp_password` (Gmail App Password) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_claude_oauth_token` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_gh_admin_token` (PAT, deploy key registration only) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
@@ -72,6 +73,14 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml --ask-vault-pass
 ### `online_api_key` lost
 
 Generate a new API key in the Online.net console (Account → API keys) and update `vault.yml` via `ansible-vault edit`. acme.sh will pick it up on the next renewal cron run.
+
+### `vault_bromine_cert_deploy_ssh_key` lost / rotate
+
+Dedicated ed25519 key acme.sh (on adguard) uses to push bromine's TLS cert over SSH. It's a self-contained pair — regenerate both halves together:
+
+1. `ssh-keygen -t ed25519 -f bromine-cert-deploy -N "" -C "acme deploy adguard->bromine"`
+2. Private half (`bromine-cert-deploy`) → `vault_bromine_cert_deploy_ssh_key` via `ansible-vault edit group_vars/all/vault.yml`. Public half (`bromine-cert-deploy.pub`) → `bromine_cert_deploy_ssh_pubkey` in `group_vars/all/vars.yml`.
+3. `ansible-playbook playbook.yml --limit adguard,bromine` (bromine re-authorizes the new pubkey for `certdeploy`, adguard reinstalls the new private key). Delete the local keypair files afterwards.
 
 ### Neon vault secrets lost
 

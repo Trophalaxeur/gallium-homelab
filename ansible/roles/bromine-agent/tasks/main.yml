@@ -285,3 +285,96 @@
     owner: root
     group: root
     mode: "0644"
+
+# Step 10 — TLS reverse proxy (Caddy)
+# The extension runs in a secure context and force-upgrades plain-HTTP fetches
+# to HTTPS, so the backend must be reachable over TLS even on the LAN. Caddy
+# terminates TLS on :443 and proxies to the loopback-bound backend on :3000.
+# The cert itself is NOT issued here: it's issued on the AdGuard LXC (acme.sh,
+# DNS-01) and pushed to /etc/caddy/cert over SSH by the `bromine-cert` role —
+# so the Online.net DNS API key never lands on this box. See docs/bromine.md.
+
+- name: Add Caddy signing key
+  get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /etc/apt/keyrings/caddy-stable.asc
+    mode: "0644"
+    force: false
+
+- name: Add Caddy APT repo
+  copy:
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/caddy-stable.asc] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
+    mode: "0644"
+
+# Caddy's packaged systemd unit already runs as user `caddy` with
+# AmbientCapabilities=CAP_NET_BIND_SERVICE, so it binds :443 without any change
+# to the unprivileged backend. Installing the package also creates the `caddy`
+# user/group — created here BEFORE certdeploy so certdeploy's primary group can
+# be caddy (files it writes are then caddy-readable by default).
+- name: Install Caddy
+  apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+# certdeploy: the unprivileged account acme.sh (on adguard) logs into to write
+# the renewed cert + reload Caddy. Needs a real shell for the ssh deploy-hook,
+# but is boxed in by a source-restricted authorized_key and a one-command
+# sudoers. Primary group `caddy` → the cert/key files it writes are group-owned
+# by caddy (which reads them) without any post-write chgrp.
+- name: Create certdeploy user (target of the acme.sh ssh deploy-hook)
+  user:
+    name: certdeploy
+    system: true
+    shell: /bin/bash
+    group: caddy
+    create_home: true
+    state: present
+
+# certdeploy writes the cert files (owner), caddy reads them (group). The
+# private key never becomes readable by bromineuser (the app) — the deploy-hook
+# chmods key.pem to 0640 after each write (see bromine-cert role).
+- name: Create Caddy cert directory
+  file:
+    path: /etc/caddy/cert
+    state: directory
+    owner: certdeploy
+    group: caddy
+    mode: "0750"
+
+- name: Authorize the deploy key for certdeploy (source-restricted)
+  ansible.posix.authorized_key:
+    user: certdeploy
+    state: present
+    key: "{{ bromine_cert_deploy_ssh_pubkey }}"
+    key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
+    exclusive: true
+
+- name: Grant certdeploy a one-command sudoers rule (reload Caddy only)
+  copy:
+    dest: /etc/sudoers.d/certdeploy
+    content: |
+      certdeploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart caddy
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Deploy Caddyfile
+  template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: caddy
+    mode: "0640"
+  notify: Reload caddy
+
+# Enabled so it comes up on boot; NOT started here — Caddy refuses to start
+# while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).
+# The bromine-cert role's ssh deploy-hook runs `systemctl restart caddy` right
+# after landing the cert, which is what starts it the first time. On subsequent
+# runs the cert already exists and the Reload caddy handler succeeds normally.
+- name: Enable Caddy service
+  systemd:
+    name: caddy
+    enabled: true
