@@ -76,14 +76,21 @@ Three GitHub deploy keys are generated on the LXC and registered automatically b
 
 ### Update the backend code (after a merge to `main`)
 
-- **Ansible (recommended, idempotent):** `ansible-playbook playbook.yml --limit bromine`.
+- **On-demand (fastest — no playbook, no adguard in scope):** from thallium,
+  `ssh root@192.168.1.61 bromine-deploy`. The `/usr/local/sbin/bromine-deploy`
+  script (provisioned by the role) runs `git pull --ff-only` + `npm ci` as
+  `bromineuser`, then restarts the service as root. Use this for routine code
+  updates — it skips the full playbook and never needs adguard in scope. Wrap
+  it in a thallium alias: `alias bromine-deploy='ssh root@192.168.1.61 bromine-deploy'`.
+- **Ansible (idempotent, full reconcile):** `ansible-playbook playbook.yml --limit bromine`.
   The `git` task (`force: true`) on `/opt/bromine-backend` re-pulls `main`,
   `npm ci` reinstalls, and the `Restart bromine-backend` handler restarts the
-  service.
+  service. Use when the role itself (not just the app code) changed.
 - **Manual hotfix (no playbook):** SSH to bromine as `bromineuser` →
-  `cd /opt/bromine-backend && git pull && npm ci`, then
-  `sudo systemctl restart bromine-backend`. ⚠️ the next Ansible run will
-  `force`-reset any local divergence — push upstream first, never edit in place.
+  `cd /opt/bromine-backend && git pull && npm ci`, then restart as root
+  (`ssh root@192.168.1.61 systemctl restart bromine-backend` — `bromineuser`
+  has no sudo rule for it). ⚠️ the next Ansible run will `force`-reset any local
+  divergence — push upstream first, never edit in place.
 - Verify: `systemctl status bromine-backend` + `curl https://bromine.flefevre.fr/health`.
 
 ### TLS certificate renewal
@@ -117,4 +124,4 @@ itself updates via `apt upgrade` (official repo).
 
 ## Daily report
 
-A cron job (`/etc/cron.d/bromine-daily-report`, 07:30) runs `/opt/bromine-backend/scripts/daily-report.sh`, which emails `admin@flefevre.fr` via `msmtp` (independent SMTP config from neon's — see `ansible/roles/bromine-agent/templates/msmtprc.j2`) with: requests processed, CVs generated, commits made, and any errors from the previous day.
+A cron job (`/etc/cron.d/bromine-daily-report`, 07:30, runs as `bromineuser`) runs `/usr/local/bin/bromine-daily-report` (provisioned by the role from `templates/daily-report.sh.j2`), which emails `admin@flefevre.fr` via `msmtp` (independent SMTP config from neon's — see `ansible/roles/bromine-agent/templates/msmtprc.j2`) with: generations requested, CVs generated, generations failed, and commits made the previous day. Data sources: journald (the app's stdout/stderr — readable by `bromineuser` since the service runs under its UID, `[cv/generate]` log lines) and the carbon-notes git log (`Add tailored CV:` commits). Enable persistent journald (already on — `/var/log/journal` exists) so yesterday's figures survive a reboot.

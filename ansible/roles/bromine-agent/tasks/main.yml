@@ -270,6 +270,29 @@
     state: started
     daemon_reload: true
 
+# On-demand redeploy helper — pull main + npm ci + restart, run as root over
+# SSH from thallium (`ssh root@bromine.lan bromine-deploy`). Lets a code update
+# skip a full playbook run (and the adguard cert play entirely). Lives outside
+# the repo tree so `git pull` never touches it.
+- name: Deploy bromine-deploy helper script
+  template:
+    src: bromine-deploy.j2
+    dest: /usr/local/sbin/bromine-deploy
+    owner: root
+    group: root
+    mode: "0750"
+
+# Daily report script — parses journald (app runs under bromineuser's UID, so
+# its stdout/stderr is readable without systemd-journal group) + carbon-notes
+# git log, emails the admin via msmtp. Provisioned before the cron that runs it.
+- name: Deploy daily report script
+  template:
+    src: daily-report.sh.j2
+    dest: /usr/local/bin/bromine-daily-report
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Deploy daily report cron
   template:
     src: cron-daily-report.j2
