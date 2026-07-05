@@ -1,0 +1,16 @@
+---
+- name: Restart bromine-backend
+  systemd:
+    name: bromine-backend
+    state: restarted
+    daemon_reload: true
+
+# reload (not restart): picks up Caddyfile changes without dropping the listener.
+# Caddy validates the config on reload and keeps the old one on failure, so a
+# reload before the cert has been pushed from adguard is a safe no-op error
+# rather than an outage.
+- name: Reload caddy
+  systemd:
+    name: caddy
+    state: reloaded
+  failed_when: false

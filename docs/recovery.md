@@ -73,6 +73,13 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml --ask-vault-pass
 
 Generate a new API key in the Online.net console (Account → API keys) and update `vault.yml` via `ansible-vault edit`. acme.sh will pick it up on the next renewal cron run.
 
+### adguard→bromine cert deploy key lost / rotate
+
+Not a vault secret. The ed25519 key acme.sh (on adguard) uses to push bromine's TLS cert over SSH is generated on adguard at deploy time (`playbook.yml` adguard play) and lives only at `/root/.ssh/bromine-cert-deploy` there. To rotate:
+
+1. On **adguard**: `rm /root/.ssh/bromine-cert-deploy{,.pub}`.
+2. `ansible-playbook playbook.yml --limit adguard,bromine` — adguard regenerates the pair, bromine re-authorizes the new public half for `certdeploy` (`exclusive: true` drops the old one).
+
 ### Neon vault secrets lost
 
 | Secret | How to regenerate |

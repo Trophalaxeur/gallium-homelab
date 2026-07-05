@@ -1,0 +1,15 @@
+[Unit]
+Description=bromine-backend — CV tailoring API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bromineuser
+WorkingDirectory=/opt/bromine-backend
+ExecStart=/usr/bin/node --experimental-strip-types /opt/bromine-backend/src/index.ts
+Restart=always
+RestartSec=10
+EnvironmentFile=/etc/bromine.env
+
+[Install]
+WantedBy=multi-user.target

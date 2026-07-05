@@ -1,0 +1,16 @@
+/home/bromineuser/logs/*.log {
+  daily
+  rotate 14
+  compress
+  missingok
+  notifempty
+}
+
+/var/log/msmtp.log {
+  monthly
+  rotate 6
+  compress
+  missingok
+  notifempty
+  create 0640 bromineuser bromineuser
+}

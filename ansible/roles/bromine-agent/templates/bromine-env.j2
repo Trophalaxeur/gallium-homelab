@@ -1,0 +1,14 @@
+NODE_ENV=production
+PORT=3000
+# Behind Caddy (TLS :443 → reverse_proxy → here) — bind loopback so :3000 isn't
+# reachable on the LAN and can't bypass TLS.
+BIND_HOST=127.0.0.1
+ANTHROPIC_API_KEY={{ vault_anthropic_api_token }}
+GOOGLE_CLIENT_ID={{ vault_google_client_id }}
+GOOGLE_CLIENT_SECRET={{ vault_google_client_secret }}
+ALLOWED_EMAILS={{ vault_bromine_allowed_emails }}
+CONTENT_TOKEN={{ vault_gh_admin_token }}
+CARBON_NOTES_REPO_PATH=/home/bromineuser/repos/carbon-notes
+BISMUTH_BLOG_REPO_PATH=/home/bromineuser/repos/bismuth-blog
+BROMINE_ADMIN_EMAIL={{ bromine_admin_email | default('admin@flefevre.fr') }}
+PATH=/usr/local/bin:/usr/bin:/bin

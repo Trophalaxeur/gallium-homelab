@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# bromine-backend daily activity report — emailed to the admin at 07:30 (cron).
+# Provisioned by the bromine-agent Ansible role. Runs as bromineuser: the
+# service runs under this UID, so its journald stdout/stderr is readable here
+# WITHOUT the systemd-journal group (only app lines, not systemd lifecycle —
+# which is exactly what we count). Best-effort: a missing data source degrades
+# a figure to 0, it never blocks the mail. Deliberately no `set -e` — grep -c
+# with zero matches exits 1 and must not abort the run.
+set -uo pipefail
+
+UNIT=bromine-backend
+CARBON_NOTES=/home/bromineuser/repos/carbon-notes
+ADMIN_EMAIL="{{ bromine_admin_email }}"
+FROM_ADDR="{{ smtp_from_bromine | default('bromine@flefevre.fr') }}"
+
+since="$(date -d 'yesterday 00:00:00' '+%Y-%m-%d %H:%M:%S')"
+until="$(date -d 'today 00:00:00' '+%Y-%m-%d %H:%M:%S')"
+day="$(date -d 'yesterday' '+%Y-%m-%d')"
+
+logs="$(journalctl -u "$UNIT" --since "$since" --until "$until" --no-pager 2>/dev/null)"
+
+count() { printf '%s\n' "$logs" | grep -cE "$1"; }
+# Log signatures emitted by src/routes/cv.ts (one per generation lifecycle):
+#   request started  → "[cv/generate] base=…"
+#   generated OK      → "[cv/generate] name=…"
+#   failed            → "[cv/generate] session=… failed:"
+started=$(count '\[cv/generate\] base=')
+succeeded=$(count '\[cv/generate\] name=')
+failed=$(count '\[cv/generate\].*failed:')
+
+# Commits made by the "Valider" flow (commitTailoredSession → "Add tailored CV: <slug>").
+commits=$(git -C "$CARBON_NOTES" log --since="$since" --until="$until" \
+  --grep='^Add tailored CV:' --oneline 2>/dev/null | wc -l | tr -d ' ')
+
+errors="$(printf '%s\n' "$logs" | grep -iE 'failed:|\[astro\].*error' | head -20)"
+
+body="bromine-backend — daily report for ${day}
+
+  Generations requested   : ${started}
+  CVs generated (OK)       : ${succeeded}
+  Generations failed       : ${failed}
+  Commits to carbon-notes  : ${commits}
+"
+if [ -n "$errors" ]; then
+  body="${body}
+--- Errors (first 20 lines) ---
+${errors}
+"
+else
+  body="${body}
+No errors logged.
+"
+fi
+
+msmtp "$ADMIN_EMAIL" <<EOF
+To: ${ADMIN_EMAIL}
+From: ${FROM_ADDR}
+Subject: bromine daily report — ${day}
+
+${body}
+EOF

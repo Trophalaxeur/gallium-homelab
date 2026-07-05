@@ -89,6 +89,12 @@ filtering:
     - domain: neon.flefevre.fr
       answer: "{{ neon_ip }}"
       enabled: true
+    - domain: bromine.lan
+      answer: "{{ bromine_ip }}"
+      enabled: true
+    - domain: bromine.flefevre.fr
+      answer: "{{ bromine_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

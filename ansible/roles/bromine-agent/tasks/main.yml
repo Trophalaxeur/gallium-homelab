@@ -1,0 +1,409 @@
+---
+# Step 1 — bromineuser
+- name: Create bromineuser
+  user:
+    name: bromineuser
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+# Step 2 — external repos (Node.js only — no GitHub CLI/Claude Code/Multica
+# needed on this VM: LLM calls go through @anthropic-ai/sdk directly)
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add NodeSource signing key
+  get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/nodesource.asc
+    mode: "0644"
+    force: false
+
+# Node 22 (not 20 LTS): matches bismuth-blog's pinned .nvmrc and is required
+# for `--experimental-strip-types` (direct .ts execution, no build step) — >= 22.6.
+- name: Add NodeSource APT repo (Node 22)
+  copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_22.x nodistro main
+    mode: "0644"
+
+# Step 3 — packages
+- name: Install packages
+  apt:
+    name:
+      - nodejs
+      - git
+      - cron
+      - logrotate
+      - curl
+      - sudo
+      - mailutils
+      - msmtp
+    state: present
+    update_cache: true
+
+# Step 4 — msmtp
+- name: Deploy msmtp config
+  template:
+    src: msmtprc.j2
+    dest: /etc/msmtprc
+    owner: root
+    group: bromineuser
+    mode: "0640"
+  no_log: true   # template renders vault_smtp_password
+
+- name: Ensure msmtp log file exists
+  file:
+    path: /var/log/msmtp.log
+    state: touch
+    owner: bromineuser
+    group: bromineuser
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Set sendmail symlink to msmtp
+  file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+    force: true
+
+# SSH access — authorize Thallium's key for bromineuser
+# root access is already handled by Terraform via user_account.keys
+- name: Authorize Thallium SSH key for bromineuser
+  ansible.posix.authorized_key:
+    user: bromineuser
+    state: present
+    key: "{{ ssh_public_key }}"
+
+# Step 5 — SSH deploy keys (one per repo, GitHub limitation)
+- name: Create .ssh directory for bromineuser
+  file:
+    path: /home/bromineuser/.ssh
+    state: directory
+    owner: bromineuser
+    group: bromineuser
+    mode: "0700"
+
+- name: Generate SSH deploy key per repository
+  become_user: bromineuser
+  command: >
+    ssh-keygen -t ed25519
+    -f /home/bromineuser/.ssh/bromine_deploy_{{ item }}
+    -N ""
+    -C "bromine-deploy-{{ item }}"
+  args:
+    creates: /home/bromineuser/.ssh/bromine_deploy_{{ item }}
+  loop: "{{ deploy_key_repos }}"
+
+- name: Deploy SSH config (per-repo host aliases)
+  template:
+    src: ssh-config.j2
+    dest: /home/bromineuser/.ssh/config
+    owner: bromineuser
+    group: bromineuser
+    mode: "0600"
+
+# Pinned ed25519 fingerprint from
+# https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+- name: Authorize GitHub ed25519 host key for bromineuser
+  become_user: bromineuser
+  ansible.builtin.known_hosts:
+    name: github.com
+    key: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+    state: present
+    path: /home/bromineuser/.ssh/known_hosts
+
+- name: Read deploy public keys
+  slurp:
+    src: /home/bromineuser/.ssh/bromine_deploy_{{ item }}.pub
+  register: deploy_pubkeys
+  loop: "{{ deploy_key_repos }}"
+
+# GET-then-POST: list existing keys on each repo, only POST if our pubkey is
+# missing. Avoids the 422 ambiguity — GitHub's "key is already in use" can
+# mean the key exists ANYWHERE (other repo / other user), not necessarily here.
+- name: List existing deploy keys per repository
+  uri:
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item.item }}/keys"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ vault_gh_admin_token }}"
+      Accept: application/vnd.github+json
+    status_code: 200
+  loop: "{{ deploy_pubkeys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: existing_repo_keys
+  no_log: true
+
+# carbon-notes needs read+write (tailored CV commits); bismuth-blog and
+# bromine-backend itself are read-only (cloned only to render PDFs / run the API).
+- name: Register deploy key on repos where it's missing
+  uri:
+    url: "https://api.github.com/repos/Trophalaxeur/{{ item.0.item }}/keys"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ vault_gh_admin_token }}"
+      Accept: application/vnd.github+json
+    body_format: json
+    body:
+      title: "bromine-deploy-{{ item.0.item }}-{{ ansible_hostname }}"
+      key: "{{ item.0.content | b64decode | trim }}"
+      read_only: "{{ item.0.item not in deploy_key_repos_write }}"
+    status_code: 201
+  loop: "{{ deploy_pubkeys.results | zip(existing_repo_keys.results) | list }}"
+  loop_control:
+    label: "{{ item.0.item }}"
+  vars:
+    local_key_norm: "{{ item.0.content | b64decode | trim | regex_replace('^(\\S+\\s+\\S+).*', '\\1') }}"
+    remote_keys_norm: "{{ item.1.json | map(attribute='key') | map('regex_replace', '^(\\S+\\s+\\S+).*', '\\1') | list }}"
+  when:
+    - local_key_norm not in remote_keys_norm
+  no_log: true
+
+# Step 6 — Runtime directories
+- name: Create bromine runtime directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: bromineuser
+    group: bromineuser
+    mode: "0750"
+  loop:
+    - /home/bromineuser/repos
+    - /home/bromineuser/logs
+
+# Step 7 — Clone content repos (read for CV sources + Josiane, write for commits)
+# force: true — these working trees are managed exclusively by the backend
+# process (git pull on startup) and by the "Valider" commit flow. Any local
+# modification would be a hotfix that must be pushed upstream first.
+- name: Clone carbon-notes
+  become_user: bromineuser
+  git:
+    repo: git@carbon-notes.github.com:Trophalaxeur/carbon-notes.git
+    dest: /home/bromineuser/repos/carbon-notes
+    force: true
+
+- name: Clone bismuth-blog
+  become_user: bromineuser
+  git:
+    repo: git@bismuth-blog.github.com:Trophalaxeur/bismuth-blog.git
+    dest: /home/bromineuser/repos/bismuth-blog
+    force: true
+
+- name: Install bismuth-blog dependencies (for astro dev + Playwright PDF rendering)
+  become_user: bromineuser
+  command: npm ci
+  args:
+    chdir: /home/bromineuser/repos/bismuth-blog
+
+# Step 8 — bromine-backend itself
+# ⚠️ Requires the bromine-backend repo to already exist and be pushed to
+# GitHub before this play is run — see bromine-backend README for first-time
+# setup order (create repo → push → run this playbook).
+- name: Create /opt/bromine-backend with bromineuser ownership
+  file:
+    path: /opt/bromine-backend
+    state: directory
+    owner: bromineuser
+    group: bromineuser
+    mode: "0755"
+
+- name: Clone bromine-backend to /opt/bromine-backend
+  become_user: bromineuser
+  git:
+    repo: git@bromine-backend.github.com:Trophalaxeur/bromine-backend.git
+    dest: /opt/bromine-backend
+    force: true
+  notify: Restart bromine-backend
+
+- name: Install bromine-backend dependencies
+  become_user: bromineuser
+  command: npm ci
+  args:
+    chdir: /opt/bromine-backend
+
+# Chromium system libraries need root for apt-get install; the browser
+# binary itself is installed for bromineuser, who runs the service.
+- name: Install Playwright Chromium system dependencies
+  command: npx playwright install-deps chromium
+  args:
+    chdir: /opt/bromine-backend
+
+- name: Install Playwright Chromium browser
+  become_user: bromineuser
+  command: npx playwright install chromium
+  args:
+    chdir: /opt/bromine-backend
+    creates: /home/bromineuser/.cache/ms-playwright
+
+# Step 9 — env file, systemd service, cron, logrotate
+- name: Deploy /etc/bromine.env
+  template:
+    src: bromine-env.j2
+    dest: /etc/bromine.env
+    owner: root
+    group: bromineuser
+    mode: "0640"
+  no_log: true   # renders API keys / OAuth secrets
+  notify: Restart bromine-backend
+
+- name: Deploy bromine-backend systemd unit
+  template:
+    src: bromine-backend.service.j2
+    dest: /etc/systemd/system/bromine-backend.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart bromine-backend
+
+- name: Enable and start bromine-backend service
+  systemd:
+    name: bromine-backend
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# On-demand redeploy helper — pull main + npm ci + restart, run as root over
+# SSH from thallium (`ssh root@bromine.lan bromine-deploy`). Lets a code update
+# skip a full playbook run (and the adguard cert play entirely). Lives outside
+# the repo tree so `git pull` never touches it.
+- name: Deploy bromine-deploy helper script
+  template:
+    src: bromine-deploy.j2
+    dest: /usr/local/sbin/bromine-deploy
+    owner: root
+    group: root
+    mode: "0750"
+
+# Daily report script — parses journald (app runs under bromineuser's UID, so
+# its stdout/stderr is readable without systemd-journal group) + carbon-notes
+# git log, emails the admin via msmtp. Provisioned before the cron that runs it.
+- name: Deploy daily report script
+  template:
+    src: daily-report.sh.j2
+    dest: /usr/local/bin/bromine-daily-report
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy daily report cron
+  template:
+    src: cron-daily-report.j2
+    dest: /etc/cron.d/bromine-daily-report
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy logrotate config
+  template:
+    src: logrotate-bromine.j2
+    dest: /etc/logrotate.d/bromine
+    owner: root
+    group: root
+    mode: "0644"
+
+# Step 10 — TLS reverse proxy (Caddy)
+# The extension runs in a secure context and force-upgrades plain-HTTP fetches
+# to HTTPS, so the backend must be reachable over TLS even on the LAN. Caddy
+# terminates TLS on :443 and proxies to the loopback-bound backend on :3000.
+# The cert itself is NOT issued here: it's issued on the AdGuard LXC (acme.sh,
+# DNS-01) and pushed to /etc/caddy/cert over SSH by the `bromine-cert` role —
+# so the Online.net DNS API key never lands on this box. See docs/bromine.md.
+
+- name: Add Caddy signing key
+  get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /etc/apt/keyrings/caddy-stable.asc
+    mode: "0644"
+    force: false
+
+- name: Add Caddy APT repo
+  copy:
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/caddy-stable.asc] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
+    mode: "0644"
+
+# Caddy's packaged systemd unit already runs as user `caddy` with
+# AmbientCapabilities=CAP_NET_BIND_SERVICE, so it binds :443 without any change
+# to the unprivileged backend. Installing the package also creates the `caddy`
+# user/group — created here BEFORE certdeploy so certdeploy's primary group can
+# be caddy (files it writes are then caddy-readable by default).
+- name: Install Caddy
+  apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+# certdeploy: the unprivileged account acme.sh (on adguard) logs into to write
+# the renewed cert + reload Caddy. Needs a real shell for the ssh deploy-hook,
+# but is boxed in by a source-restricted authorized_key and a one-command
+# sudoers. Primary group `caddy` → the cert/key files it writes are group-owned
+# by caddy (which reads them) without any post-write chgrp.
+- name: Create certdeploy user (target of the acme.sh ssh deploy-hook)
+  user:
+    name: certdeploy
+    system: true
+    shell: /bin/bash
+    group: caddy
+    create_home: true
+    state: present
+
+# certdeploy writes the cert files (owner), caddy reads them (group). The
+# private key never becomes readable by bromineuser (the app) — the deploy-hook
+# chmods key.pem to 0640 after each write (see bromine-cert role).
+- name: Create Caddy cert directory
+  file:
+    path: /etc/caddy/cert
+    state: directory
+    owner: certdeploy
+    group: caddy
+    mode: "0750"
+
+# Public half of the keypair generated on adguard (playbook.yml adguard play).
+# Read from adguard's facts, so no static pubkey/vault secret is needed. The
+# guard skips this when adguard isn't in scope (e.g. `--limit bromine` alone):
+# the key rarely changes, so a bromine-only run safely leaves it as-is — run
+# `--limit adguard,bromine` to (re)sync it.
+- name: Authorize the deploy key for certdeploy (source-restricted)
+  ansible.posix.authorized_key:
+    user: certdeploy
+    state: present
+    key: "{{ hostvars[groups['adguard'][0]]['bromine_cert_deploy_pubkey'] }}"
+    key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
+    exclusive: true
+  when: hostvars[groups['adguard'][0]]['bromine_cert_deploy_pubkey'] is defined
+
+- name: Grant certdeploy a one-command sudoers rule (reload Caddy only)
+  copy:
+    dest: /etc/sudoers.d/certdeploy
+    content: |
+      certdeploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart caddy
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Deploy Caddyfile
+  template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: caddy
+    mode: "0640"
+  notify: Reload caddy
+
+# Enabled so it comes up on boot; NOT started here — Caddy refuses to start
+# while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).
+# The bromine-cert role's ssh deploy-hook runs `systemctl restart caddy` right
+# after landing the cert, which is what starts it the first time. On subsequent
+# runs the cert already exists and the Reload caddy handler succeeds normally.
+- name: Enable Caddy service
+  systemd:
+    name: caddy
+    enabled: true

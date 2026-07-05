@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# On-demand redeploy of bromine-backend: pull latest main, reinstall deps,
+# restart the service. Provisioned by the bromine-agent Ansible role.
+#
+# Trigger from thallium (root SSH key is authorized by Terraform):
+#   ssh root@bromine.lan bromine-deploy
+#
+# git/npm run as bromineuser (repo owner + deploy-key holder); the restart
+# needs root — hence this script must run as root. --ff-only fails loudly on
+# local divergence instead of silently discarding a hotfix: push upstream first.
+set -euo pipefail
+
+REPO=/opt/bromine-backend
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "bromine-deploy: must run as root (needs 'systemctl restart')." >&2
+  exit 1
+fi
+
+echo "==> Pulling latest bromine-backend (main)…"
+sudo -u bromineuser -H git -C "$REPO" pull --ff-only
+
+echo "==> Installing dependencies (npm ci)…"
+sudo -u bromineuser -H npm --prefix "$REPO" ci
+
+echo "==> Restarting bromine-backend…"
+systemctl restart bromine-backend
+sleep 2
+systemctl --no-pager --lines=0 status bromine-backend
+
+echo "==> Done — now on $(sudo -u bromineuser -H git -C "$REPO" rev-parse --short HEAD)"
