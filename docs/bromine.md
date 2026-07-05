@@ -44,6 +44,15 @@ AdGuard rewrite (previously unused) is now the live entrypoint. Use the
   by a source-restricted (`from=<adguard-ip>`) authorized_key and a sudoers rule
   limited to `systemctl restart caddy`. The TLS key is written `0640` group
   `caddy` — readable by Caddy, **not** by `bromineuser` (the app).
+- **The deploy keypair is generated on adguard** (`playbook.yml` adguard play,
+  `ssh-keygen` guarded by `creates:`) — its private half is born and stays on
+  adguard, **never in vault**. The bromine play reads the public half from
+  adguard's facts to authorize it on `certdeploy`. Tradeoff: this couples the
+  two hosts at deploy time — the pubkey authorization is skipped when adguard
+  isn't in scope (`--limit bromine` alone), and rebuilding adguard regenerates
+  the key, so **re-run `--limit adguard,bromine` once after an adguard rebuild**
+  to re-sync it. Routine backend code updates don't hit this — they go through
+  `bromine-deploy` (see below), not the playbook.
 
 **Internet exposure** remains an option later (e.g. trigger a generation from a
 phone off-network) via a Cloudflare Tunnel on this LXC (`apt install cloudflared`
@@ -68,7 +77,7 @@ Three GitHub deploy keys are generated on the LXC and registered automatically b
 ## First-time setup order
 
 1. Create and push the `bromine-backend` repo to GitHub (the Ansible role's git clone task expects it to already exist — see that repo's own README for local dev setup).
-2. Fill in the required vault vars (`ansible-vault edit group_vars/all/vault.yml`): `vault_smtp_password`, `vault_gh_admin_token`, `vault_anthropic_api_token`, `vault_google_client_id`, `vault_google_client_secret`, `vault_bromine_allowed_emails`, `vault_bromine_cert_deploy_ssh_key` (private half of the adguard→bromine deploy key — see `docs/recovery.md`). `online_api_key` must already exist (shared with adguard-home).
+2. Fill in the required vault vars (`ansible-vault edit group_vars/all/vault.yml`): `vault_smtp_password`, `vault_gh_admin_token`, `vault_anthropic_api_token`, `vault_google_client_id`, `vault_google_client_secret`, `vault_bromine_allowed_emails`. `online_api_key` must already exist (shared with adguard-home). The adguard→bromine cert deploy key is generated automatically on adguard — no vault entry needed.
 3. `terraform apply` (provisions the LXC).
 4. `ansible-playbook playbook.yml --limit adguard,bromine` — **adguard must be in scope**: the TLS cert is issued there and pushed to bromine. `--limit bromine` alone provisions the app but leaves Caddy without a cert (it won't start).
 
@@ -110,11 +119,14 @@ Three GitHub deploy keys are generated on the LXC and registered automatically b
 
 ### Rotate the adguard→bromine deploy key
 
-1. Regenerate: `ssh-keygen -t ed25519 -f bromine-cert-deploy -N "" -C "acme deploy adguard->bromine"`.
-2. Private half → `vault_bromine_cert_deploy_ssh_key` (`ansible-vault edit group_vars/all/vault.yml`),
-   public half → `bromine_cert_deploy_ssh_pubkey` in `group_vars/all/vars.yml`.
-3. Redeploy both hosts: `ansible-playbook playbook.yml --limit adguard,bromine`
-   (bromine re-authorizes the new pubkey, adguard reinstalls the new private key).
+The keypair is generated on adguard and not stored anywhere else, so rotation is
+just "delete + redeploy":
+
+1. On **adguard**, remove the current pair: `rm /root/.ssh/bromine-cert-deploy{,.pub}`.
+2. Redeploy both hosts: `ansible-playbook playbook.yml --limit adguard,bromine`.
+   The adguard play regenerates the pair (the `creates:` guard no longer short-
+   circuits), and the bromine play re-authorizes the new public half on
+   `certdeploy` (`exclusive: true` drops the old one). No vault edit involved.
 
 ### Update Caddy / the Caddyfile
 

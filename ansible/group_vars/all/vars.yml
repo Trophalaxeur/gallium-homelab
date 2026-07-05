@@ -21,8 +21,7 @@ ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+
 bromine_admin_email: "admin@flefevre.fr"
 smtp_from_bromine: "bromine@flefevre.fr"
 bromine_domain: "bromine.flefevre.fr"
-# Public half of the dedicated key used by acme.sh's ssh deploy-hook to push the
-# renewed TLS cert from adguard → bromine (certdeploy user). Private half lives
-# in vault as vault_bromine_cert_deploy_ssh_key. Regenerate both together — see
-# docs/recovery.md.
-bromine_cert_deploy_ssh_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO7ffI4bhgLPvKofa8HePD7dxu5eilOPBS5NE4OvUX1M acme deploy adguard->bromine"
+# The acme.sh ssh deploy-hook key (adguard → bromine, certdeploy user) is
+# generated on adguard at deploy time (playbook.yml adguard play) — no static
+# pubkey or vault secret. The bromine play reads the public half from adguard's
+# facts. See docs/bromine.md ("How TLS is wired").

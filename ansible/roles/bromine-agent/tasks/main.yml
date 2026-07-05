@@ -367,13 +367,19 @@
     group: caddy
     mode: "0750"
 
+# Public half of the keypair generated on adguard (playbook.yml adguard play).
+# Read from adguard's facts, so no static pubkey/vault secret is needed. The
+# guard skips this when adguard isn't in scope (e.g. `--limit bromine` alone):
+# the key rarely changes, so a bromine-only run safely leaves it as-is — run
+# `--limit adguard,bromine` to (re)sync it.
 - name: Authorize the deploy key for certdeploy (source-restricted)
   ansible.posix.authorized_key:
     user: certdeploy
     state: present
-    key: "{{ bromine_cert_deploy_ssh_pubkey }}"
+    key: "{{ hostvars[groups['adguard'][0]]['bromine_cert_deploy_pubkey'] }}"
     key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
     exclusive: true
+  when: hostvars[groups['adguard'][0]]['bromine_cert_deploy_pubkey'] is defined
 
 - name: Grant certdeploy a one-command sudoers rule (reload Caddy only)
   copy:
