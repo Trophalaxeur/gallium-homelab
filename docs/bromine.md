@@ -1,3 +1,8 @@
+---
+title: "Bromine — CV tailoring backend"
+description: "LXC 102 hosting bromine-backend: the API that generates on-demand, AI-tailored CVs for the bromine-cv-extension, served over TLS via Caddy."
+---
+
 # Bromine — CV tailoring backend
 
 LXC 102 on gallium, hosting `bromine-backend` (`Trophalaxeur/bromine-backend`), the API consumed by the `bromine-cv-extension` Firefox extension to generate on-demand, AI-tailored CVs (job-offer or custom-prompt driven).
