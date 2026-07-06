@@ -10,6 +10,9 @@ ansible/group_vars/*/vault.yml
 ansible/*.retry
 ansible/.vault_pass
 
+# Scaleway bootstrap credentials
+scripts/.scaleway-credentials.env
+
 # Divers
 .DS_Store
 *.log

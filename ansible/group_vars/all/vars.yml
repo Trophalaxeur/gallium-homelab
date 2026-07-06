@@ -1,9 +1,11 @@
 ---
+proxmox_node: "gallium"
 proxmox_ip: "192.168.1.32"
 adguard_ip: "192.168.1.53"
 thallium_ip: "192.168.1.20"
 neon_ip: "192.168.1.60"
 bromine_ip: "192.168.1.61"
+pbs_ip: "192.168.1.62"
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"

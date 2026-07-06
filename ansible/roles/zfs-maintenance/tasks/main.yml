@@ -1,0 +1,74 @@
+---
+# Fresh Proxmox VE installs default to the enterprise repos, which 401
+# without a paid subscription and break every apt operation on the host.
+# Ceph isn't used in this single-node homelab either.
+- name: Disable PVE enterprise repository (requires a paid subscription)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pve-enterprise.sources
+    state: absent
+
+- name: Disable Ceph enterprise repository (Ceph not used in this homelab)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/ceph.sources
+    state: absent
+
+- name: Add PVE no-subscription repository
+  ansible.builtin.deb822_repository:
+    name: pve-no-subscription
+    types: deb
+    uris: http://download.proxmox.com/debian/pve
+    suites: trixie
+    components: pve-no-subscription
+    signed_by: /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+- name: Install sanoid and mail tooling
+  ansible.builtin.apt:
+    name:
+      - sanoid
+      - msmtp
+      - mailutils
+    state: present
+    update_cache: true
+
+- name: Deploy msmtp config (for ZED mail notifications)
+  ansible.builtin.template:
+    src: msmtprc.j2
+    dest: /etc/msmtprc
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true   # template renders vault_smtp_password
+
+- name: Point sendmail at msmtp
+  ansible.builtin.file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+    force: true
+
+- name: Create /etc/sanoid directory
+  ansible.builtin.file:
+    path: /etc/sanoid
+    state: directory
+    mode: "0755"
+
+- name: Deploy sanoid.conf (snapshot policy for rpool subvols)
+  ansible.builtin.template:
+    src: sanoid.conf.j2
+    dest: /etc/sanoid/sanoid.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Set ZED notification email
+  ansible.builtin.lineinfile:
+    path: /etc/zfs/zed.d/zed.rc
+    regexp: '^ZED_EMAIL_ADDR='
+    line: 'ZED_EMAIL_ADDR="{{ zed_email_addr }}"'
+  notify: restart zfs-zed
+
+- name: Enable monthly zpool scrub timer
+  ansible.builtin.systemd:
+    name: "zfs-scrub-monthly@{{ zfs_pool_name }}.timer"
+    enabled: true
+    state: started

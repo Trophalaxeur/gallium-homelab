@@ -1,0 +1,19 @@
+[rpool/ROOT/pve-1]
+    use_template = system
+    recursive = no
+
+# recursive: covers every LXC rootfs subvol (rpool/data/subvol-*-disk-0)
+# automatically, present and future — no ansible change needed when a new
+# LXC is added.
+[rpool/data]
+    use_template = system
+    recursive = yes
+
+[template_system]
+    hourly = {{ sanoid_hourly }}
+    daily = {{ sanoid_daily }}
+    weekly = {{ sanoid_weekly }}
+    monthly = {{ sanoid_monthly }}
+    yearly = {{ sanoid_yearly }}
+    autosnap = yes
+    autoprune = yes

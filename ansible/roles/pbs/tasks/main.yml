@@ -1,0 +1,84 @@
+---
+- name: Disable PBS enterprise repository (template default, requires a paid subscription)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pbs-enterprise.sources
+    state: absent
+
+- name: Add PBS no-subscription repository
+  ansible.builtin.deb822_repository:
+    name: pbs-no-subscription
+    types: deb
+    uris: http://download.proxmox.com/debian/pbs
+    suites: trixie
+    components: pbs-no-subscription
+    signed_by: https://enterprise.proxmox.com/debian/proxmox-release-trixie.gpg
+
+- name: Install proxmox-backup-server
+  ansible.builtin.apt:
+    name: proxmox-backup-server
+    state: present
+    update_cache: true
+
+- name: Create datastore directory
+  ansible.builtin.file:
+    path: "{{ pbs_datastore_path }}"
+    state: directory
+    mode: "0750"
+
+- name: Check existing datastores
+  ansible.builtin.command: proxmox-backup-manager datastore list --output-format json
+  register: pbs_datastore_list
+  changed_when: false
+
+- name: Create PBS datastore
+  ansible.builtin.command: >
+    proxmox-backup-manager datastore create {{ pbs_datastore_name }} {{ pbs_datastore_path }}
+  when: pbs_datastore_name not in (pbs_datastore_list.stdout | from_json | map(attribute='name') | list)
+
+- name: Check existing PBS users
+  ansible.builtin.command: proxmox-backup-manager user list --output-format json
+  register: pbs_user_list
+  changed_when: false
+
+- name: Create PBS sync user
+  ansible.builtin.command: >
+    proxmox-backup-manager user create {{ pbs_sync_user }} --email {{ pbs_sync_user_email }}
+  when: pbs_sync_user not in (pbs_user_list.stdout | from_json | map(attribute='userid') | list)
+
+- name: Generate API token for sync user (once — secret only ever shown at creation)
+  ansible.builtin.command: >
+    proxmox-backup-manager user generate-token {{ pbs_sync_user }} {{ pbs_sync_token_name }}
+  args:
+    creates: "{{ pbs_token_secret_file }}"
+  register: pbs_token_gen
+
+- name: Persist the token secret (only right after generation)
+  ansible.builtin.copy:
+    content: "{{ (pbs_token_gen.stdout | regex_search('\\{.*\\}', multiline=True, dotall=True) | from_json).value }}"
+    dest: "{{ pbs_token_secret_file }}"
+    mode: "0600"
+  when: pbs_token_gen is changed
+
+# PBS API tokens are always privilege-separated: granting a role to the user
+# does NOT extend to its tokens, each token authid needs its own ACL entry.
+- name: Grant DatastoreBackup to the sync token
+  ansible.builtin.command: >
+    proxmox-backup-manager acl update /datastore/{{ pbs_datastore_name }} DatastoreBackup
+    --auth-id "{{ pbs_sync_user }}!{{ pbs_sync_token_name }}"
+  changed_when: false
+
+- name: Read back the persisted token secret
+  ansible.builtin.slurp:
+    src: "{{ pbs_token_secret_file }}"
+  register: pbs_token_secret_slurp
+
+- name: Get PBS certificate fingerprint
+  ansible.builtin.command: proxmox-backup-manager cert info
+  register: pbs_cert_info
+  changed_when: false
+
+- name: Expose facts for the Proxmox-host play (register PBS storage + backup job)
+  ansible.builtin.set_fact:
+    pbs_sync_token_id: "{{ pbs_sync_user }}!{{ pbs_sync_token_name }}"
+    pbs_sync_token_secret: "{{ pbs_token_secret_slurp.content | b64decode | trim }}"
+    pbs_cert_fingerprint: "{{ pbs_cert_info.stdout | regex_search('Fingerprint \\(sha256\\): (\\S+)', '\\1') | first }}"

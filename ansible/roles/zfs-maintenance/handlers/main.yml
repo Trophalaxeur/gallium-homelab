@@ -1,0 +1,5 @@
+---
+- name: restart zfs-zed
+  ansible.builtin.systemd:
+    name: zfs-zed
+    state: restarted

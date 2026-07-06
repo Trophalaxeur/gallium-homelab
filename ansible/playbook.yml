@@ -133,3 +133,117 @@
 
   roles:
     - bromine-cert
+
+# PBS installed inside its own LXC (per CLAUDE.md: no services on the PVE host
+# itself). Sets facts (token id/secret, cert fingerprint) consumed by the next
+# play to register the storage on gallium — both plays must run together
+# (`--limit pbs,proxmox`), same cross-host fact pattern as adguard→bromine.
+- name: Deploy PBS (Proxmox Backup Server)
+  hosts: pbs
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  roles:
+    - pbs
+
+- name: Register PBS storage and daily backup job on the Proxmox host
+  hosts: proxmox
+  become: true
+  gather_facts: false
+
+  vars:
+    pbs_storage_name: "pbs"
+    pbs_backup_job_id: "pbs-daily-lxc-sys"
+    pbs_backup_vmids: "100,101,102"   # adguard, neon, bromine
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  tasks:
+    - name: Check if PBS storage is already registered
+      ansible.builtin.command: pvesm status --storage {{ pbs_storage_name }}
+      register: pbs_storage_check
+      failed_when: false
+      changed_when: false
+
+    - name: Register PBS storage
+      ansible.builtin.command: >
+        pvesm add pbs {{ pbs_storage_name }}
+        --server {{ hostvars['pbs.lan']['pbs_ip'] }}
+        --datastore {{ hostvars['pbs.lan']['pbs_datastore_name'] }}
+        --username {{ hostvars['pbs.lan']['pbs_sync_token_id'] }}
+        --password {{ hostvars['pbs.lan']['pbs_sync_token_secret'] }}
+        --fingerprint {{ hostvars['pbs.lan']['pbs_cert_fingerprint'] }}
+      when: pbs_storage_check.rc != 0
+
+    - name: Check existing backup jobs
+      ansible.builtin.command: pvesh get /cluster/backup --output-format json
+      register: pbs_backup_jobs
+      changed_when: false
+
+    - name: Create daily PBS backup job (adguard/neon/bromine, 30d retention)
+      ansible.builtin.command: >
+        pvesh create /cluster/backup
+        --id {{ pbs_backup_job_id }}
+        --enabled 1
+        --schedule "02:30"
+        --storage {{ pbs_storage_name }}
+        --vmid "{{ pbs_backup_vmids }}"
+        --mode snapshot
+        --prune-backups "keep-daily=30"
+        --node {{ proxmox_node }}
+        --comment "PBS daily backup - adguard/neon/bromine (ansible-managed)"
+      when: pbs_backup_job_id not in (pbs_backup_jobs.stdout | from_json | map(attribute='id') | list)
+
+# sanoid/ZED/scrub run on the host itself — they operate on the ZFS pool
+# directly (rpool), which only exists on gallium. Not a network-facing
+# service, cf. discussion in docs/next-steps.md 2026-07-06.
+#
+# Vault vars required — add via `ansible-vault edit group_vars/all/vault.yml`:
+#   vault_smtp_password   (shared — also used by neon/bromine)
+- name: ZFS maintenance on the Proxmox host (sanoid snapshots, ZED mail, monthly scrub)
+  hosts: proxmox
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  roles:
+    - zfs-maintenance

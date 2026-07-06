@@ -1,0 +1,11 @@
+---
+sanoid_hourly: 0
+sanoid_daily: 7
+sanoid_weekly: 4
+sanoid_monthly: 3
+sanoid_yearly: 0
+
+zed_email_addr: "admin@flefevre.fr"
+smtp_from_gallium: "gallium@flefevre.fr"
+
+zfs_pool_name: "rpool"
