@@ -1,0 +1,7 @@
+---
+pbs_datastore_name: "main"
+pbs_datastore_path: "/var/lib/pbs-datastore"
+pbs_sync_user: "backup@pbs"
+pbs_sync_user_email: "admin@flefevre.fr"
+pbs_sync_token_name: "pve-sync"
+pbs_token_secret_file: "/root/.pbs-sync-token-secret"

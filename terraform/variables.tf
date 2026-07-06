@@ -111,3 +111,23 @@ variable "bromine_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- pbs ---
+
+variable "pbs_vmid" {
+  description = "VMID du conteneur PBS (Proxmox Backup Server)"
+  type        = number
+  default     = 103
+}
+
+variable "pbs_ip" {
+  description = "IP statique du LXC PBS"
+  type        = string
+  default     = "192.168.1.62"
+}
+
+variable "pbs_lxc_template" {
+  description = "Template LXC pour PBS (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}

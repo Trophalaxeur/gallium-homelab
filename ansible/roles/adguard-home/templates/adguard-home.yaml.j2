@@ -95,6 +95,12 @@ filtering:
     - domain: bromine.flefevre.fr
       answer: "{{ bromine_ip }}"
       enabled: true
+    - domain: pbs.lan
+      answer: "{{ pbs_ip }}"
+      enabled: true
+    - domain: pbs.flefevre.fr
+      answer: "{{ pbs_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris
