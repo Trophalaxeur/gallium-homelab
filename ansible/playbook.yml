@@ -200,6 +200,7 @@
         --password {{ hostvars['pbs.lan']['pbs_sync_token_secret'] }}
         --fingerprint {{ hostvars['pbs.lan']['pbs_cert_fingerprint'] }}
       when: pbs_storage_check.rc != 0
+      no_log: true
 
     - name: Check existing backup jobs
       ansible.builtin.command: pvesh get /cluster/backup --output-format json
