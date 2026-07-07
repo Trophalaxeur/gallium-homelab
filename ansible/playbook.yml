@@ -153,10 +153,13 @@
 # Docker Compose deployment (server, machine-learning, postgres, redis) +
 # Caddy reverse proxy, same TLS pattern as bromine. Decisions Révision 3 of
 # ~/.claude/plans/backup-strategy.md: Docker Compose runtime, ML enabled,
-# pinned image versions. The dataset mount at /mnt/immich-photos comes from
-# Terraform (terraform/immich.tf) — must already exist (see the "Provision
-# ZFS dataset" play below, which must run — and the LXC be terraform-applied
-# — before this play can succeed).
+# pinned image versions. NOTE — required run order (not the same as this
+# file's play order): 1) the "Provision ZFS dataset for Immich photos" play
+# (further down this file, hosts: proxmox) must run first, 2) then
+# `terraform apply` creates the LXC with its mount_point pointing at that
+# dataset (terraform/immich.tf), 3) only then can this play reach the immich
+# host and succeed. Run each step explicitly (e.g. `--limit proxmox` first),
+# don't rely on a single unlimited `ansible-playbook playbook.yml` run.
 - name: Deploy Immich (Docker Compose, ML enabled)
   hosts: immich
   become: true

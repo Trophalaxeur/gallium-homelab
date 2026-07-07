@@ -46,7 +46,6 @@
     owner: root
     group: root
     mode: "0644"
-  register: immich_compose_file
 
 - name: Pull Immich images
   ansible.builtin.command: docker compose pull
@@ -67,6 +66,12 @@
 # The cert itself is issued on the AdGuard LXC (acme.sh, DNS-01) and pushed to
 # /etc/caddy/cert over SSH by the `immich-cert` role. See docs/bromine.md for
 # the mechanism this mirrors.
+
+- name: Create /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
 
 - name: Add Caddy signing key
   ansible.builtin.get_url:
