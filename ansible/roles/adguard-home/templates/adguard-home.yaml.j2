@@ -101,6 +101,14 @@ filtering:
     - domain: pbs.flefevre.fr
       answer: "{{ pbs_ip }}"
       enabled: true
+    - domain: immich.lan
+      answer: "{{ immich_ip }}"
+      enabled: true
+    # Public-facing name is {{ immich_domain }} (photos.flefevre.fr), not
+    # immich.flefevre.fr — immich.lan above stays the internal/technical name.
+    - domain: "{{ immich_domain }}"
+      answer: "{{ immich_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

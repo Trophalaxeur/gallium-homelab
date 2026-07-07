@@ -1,0 +1,7 @@
+---
+immich_install_dir: /opt/immich
+immich_upload_location: /mnt/immich-photos
+immich_db_data_location: /opt/immich/postgres
+immich_db_username: immich
+immich_db_database_name: immich
+immich_timezone: Europe/Paris

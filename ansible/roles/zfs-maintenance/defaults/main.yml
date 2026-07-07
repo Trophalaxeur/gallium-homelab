@@ -5,6 +5,14 @@ sanoid_weekly: 4
 sanoid_monthly: 3
 sanoid_yearly: 0
 
+# Paranoid retention for immich-photos (backup-strategy.md, Étape 3) — hourly
+# snapshots for same-day rollback, deep daily/weekly/monthly history since ZFS
+# snapshot cost is ~free (COW) and this is irreplaceable data.
+sanoid_photos_hourly: 24
+sanoid_photos_daily: 30
+sanoid_photos_weekly: 8
+sanoid_photos_monthly: 6
+
 zed_email_addr: "admin@flefevre.fr"
 smtp_from_gallium: "gallium@flefevre.fr"
 
