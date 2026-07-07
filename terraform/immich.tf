@@ -56,8 +56,15 @@ resource "proxmox_virtual_environment_container" "immich" {
   # (`pct set 104 -mp0 ...`, cf. next-steps.md 2026-07-06) puis déclaré ici tel
   # quel pour que Terraform le voie au refresh et cesse de vouloir le détruire
   # (une valeur absente du .tf force le remplacement complet du conteneur).
-  # Si cette LXC est un jour recréée de zéro, refaire le `pct set` à la main
-  # juste après le `terraform apply` initial.
+  # Procédure si cette LXC est un jour recréée de zéro (LXC détruite, ou
+  # `terraform apply` de remplacement) : le apply échouera sur CE bloc (403)
+  # tant que le conteneur n'existe pas déjà avec ce mount_point posé
+  # manuellement. 1) Commenter temporairement ce bloc `mount_point` entier.
+  # 2) `terraform apply` (crée la LXC sans le mount). 3) Reposer le bind-mount
+  # à la main via la console root : `pct set <vmid> -mp0
+  # /rpool/data/immich-photos,mp=/mnt/immich-photos,backup=0`. 4) Décommenter
+  # ce bloc et relancer `terraform apply` — il ne devrait alors plus montrer
+  # de diff (cf. next-steps.md 2026-07-06 pour le déroulé déjà vécu une fois).
   mount_point {
     volume = "/rpool/data/immich-photos"
     path   = "/mnt/immich-photos"
@@ -72,10 +79,12 @@ resource "proxmox_virtual_environment_container" "immich" {
   features {
     nesting = true
     # keyctl=1 est bien posé côté Proxmox (`pct config 104` et l'API REST le
-    # confirment tous les deux), mais le provider bpg/proxmox 0.105.0 ne le
-    # parse pas correctement en lecture (state refresh-only renvoie
-    # keyctl=false quel que soit l'état réel — bug de parsing du champ
-    # `features`, pas une histoire de permissions cette fois). Déclarer
+    # confirment tous les deux), mais la version du provider bpg/proxmox
+    # réellement verrouillée (cf. `.terraform.lock.hcl` — ne pas figer un
+    # numéro ici, ça dérive) ne le parse pas correctement en lecture
+    # (state refresh-only renvoie keyctl=false quel que soit l'état réel —
+    # bug de parsing du champ `features`, pas une histoire de permissions
+    # cette fois). Déclarer
     # `keyctl = true` ici ferait donc croire à un drift permanent et Terraform
     # retenterait un PUT à chaque apply → 403 root@pam (même restriction que
     # le mount_point). Laissé à `false` pour matcher ce que le provider peut

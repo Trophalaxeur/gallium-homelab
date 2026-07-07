@@ -21,6 +21,17 @@
     state: directory
     mode: "0750"
 
+# Without this guard, a missing bind-mount (LXC rebuilt before the manual
+# `pct set -mp0 ...` step, or drift — cf. terraform/immich.tf) would make
+# Docker write photos straight into the LXC rootfs: silent, no error, and it
+# defeats the whole point of the dedicated dataset (backup=no, sanoid
+# template_photos, future rclone offsite) — those photos would live
+# unprotected on rootfs and get swept into PBS instead. Same failure class as
+# the HDD rclone job's mountpoint check (backup-strategy.md, Scénario 8).
+- name: Fail if the photos dataset isn't actually mounted
+  ansible.builtin.command: mountpoint -q {{ immich_upload_location }}
+  changed_when: false
+
 # rootfs — covered by PBS as a fallback only; the pg_dumpall logical dump
 # written to the photos dataset (UPLOAD_LOCATION/backups) is the source of
 # truth for restore (cf. backup-strategy.md, "Base Immich").
