@@ -6,6 +6,7 @@ thallium_ip: "192.168.1.20"
 neon_ip: "192.168.1.60"
 bromine_ip: "192.168.1.61"
 pbs_ip: "192.168.1.62"
+immich_ip: "192.168.1.63"
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
@@ -27,3 +28,18 @@ bromine_domain: "bromine.flefevre.fr"
 # generated on adguard at deploy time (playbook.yml adguard play) — no static
 # pubkey or vault secret. The bromine play reads the public half from adguard's
 # facts. See docs/bromine.md ("How TLS is wired").
+
+# --- immich ---
+# ZFS dataset for photos + Immich's own DB dumps (backup=no equivalent — not a
+# container rootfs, excluded from PBS by nature). Shared by the "Provision ZFS
+# dataset" play, the zfs-maintenance sanoid template, and the immich LXC's
+# Terraform mount_point (terraform/immich.tf) — single source of truth.
+immich_photos_dataset: "rpool/data/immich-photos"
+immich_admin_email: "admin@flefevre.fr"
+# Public-facing name (registered at Online.net → 90.76.179.86, port-forwarded
+# on the Livebox). immich.lan stays the internal/technical AdGuard name
+# (matches the LXC hostname, like adguard.lan/bromine.lan/pbs.lan) — only the
+# public domain changed, decision 2026-07-07.
+immich_domain: "photos.flefevre.fr"
+immich_version: "v3.0.1"
+smtp_from_immich: "immich@flefevre.fr"

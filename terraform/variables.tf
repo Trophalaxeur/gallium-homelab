@@ -131,3 +131,23 @@ variable "pbs_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- immich ---
+
+variable "immich_vmid" {
+  description = "VMID du conteneur Immich"
+  type        = number
+  default     = 104
+}
+
+variable "immich_ip" {
+  description = "IP statique du LXC Immich"
+  type        = string
+  default     = "192.168.1.63"
+}
+
+variable "immich_lxc_template" {
+  description = "Template LXC pour Immich (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}

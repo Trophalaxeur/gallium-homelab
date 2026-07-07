@@ -9,11 +9,28 @@
     use_template = system
     recursive = yes
 
+# More specific than the recursive rule above — sanoid matches the deepest
+# stanza, so this overrides template_system for this one dataset. Paranoid
+# retention: photos are irreplaceable (backup-strategy.md, Étape 3) and this
+# is only the local/fast-rollback layer — Scaleway + HDD cover the rest.
+[{{ immich_photos_dataset }}]
+    use_template = photos
+    recursive = no
+
 [template_system]
     hourly = {{ sanoid_hourly }}
     daily = {{ sanoid_daily }}
     weekly = {{ sanoid_weekly }}
     monthly = {{ sanoid_monthly }}
     yearly = {{ sanoid_yearly }}
+    autosnap = yes
+    autoprune = yes
+
+[template_photos]
+    hourly = {{ sanoid_photos_hourly }}
+    daily = {{ sanoid_photos_daily }}
+    weekly = {{ sanoid_photos_weekly }}
+    monthly = {{ sanoid_photos_monthly }}
+    yearly = 0
     autosnap = yes
     autoprune = yes
