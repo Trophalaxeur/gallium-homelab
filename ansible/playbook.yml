@@ -235,7 +235,7 @@
   vars:
     pbs_storage_name: "pbs"
     pbs_backup_job_id: "pbs-daily-lxc-sys"
-    pbs_backup_vmids: "100,101,102,104"   # adguard, neon, bromine, immich (rootfs only — photos excluded, cf. Étape 3)
+    pbs_backup_vmids: "100,101,102,104,105"   # adguard, neon, bromine, immich, backup (rootfs only — photos/HDD bind-mounts excluded, cf. Étape 3/3-bis)
 
   pre_tasks:
     - name: Accept host key
@@ -285,7 +285,7 @@
         --mode snapshot
         --prune-backups "keep-daily=30"
         --node {{ proxmox_node }}
-        --comment "PBS daily backup - adguard/neon/bromine/immich (ansible-managed)"
+        --comment "PBS daily backup - adguard/neon/bromine/immich/backup (ansible-managed)"
       when: pbs_backup_job_id not in (pbs_backup_jobs.stdout | from_json | map(attribute='id') | list)
 
     # `pvesh create` above only runs once (job absent). When the job already
@@ -375,3 +375,40 @@
 
   roles:
     - zfs-maintenance
+
+# Isolated backup LXC (105) — runs the rclone/HDD/Object-Lock jobs (Étape 4 of
+# ~/.claude/plans/backup-strategy.md). Prerequisites (must be done first):
+#   1) The "Provision ZFS dataset for Immich photos" play + the immich LXC exist
+#      (this LXC read-only bind-mounts that dataset).
+#   2) The external HDD is mounted host-side on /mnt/hdd-external (Étape 0-bis).
+#   3) `terraform apply` created LXC 105 with its two bind-mounts. The scoped
+#      Terraform token can't post bind-mounts (403 root@pam) — post them once on
+#      the Proxmox root console, see terraform/backup.tf.
+#
+# Vault vars required — add via `ansible-vault edit group_vars/all/vault.yml`:
+#   vault_smtp_password              (shared — also used by neon/bromine)
+#   vault_rclone_scaleway_access_key / vault_rclone_scaleway_secret_key
+#     (scoped Scaleway IAM key: Put/Get only, Delete*/PutBucketVersioning denied)
+#   vault_hc_uuid_rclone_scaleway / vault_hc_uuid_rclone_hdd
+#   vault_hc_uuid_object_lock_renew  (healthchecks.io ping UUIDs)
+- name: Deploy the isolated backup LXC (rclone → Scaleway/HDD, Object Lock renewal)
+  hosts: backup
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  roles:
+    - backup

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Étape 4a — nightly copy of the Immich photos + DB dumps to Scaleway Object
+# Storage. The bucket has a DEFAULT Object Lock retention (Compliance, 90 days)
+# set at creation (scripts/scaleway-bucket-bootstrap.sh), so every freshly PUT
+# object is locked automatically — no per-object flag needed here. Weekly
+# renewal (backup-object-lock-renew.sh) keeps still-present photos locked past
+# their original 90 days (Rétention glissante).
+#
+# rclone COPY (never sync/delete): a deletion in Immich must not propagate to
+# the cloud copy — that's a whole point of this tier (Scénario 5/6).
+set -uo pipefail
+
+SRC="{{ backup_photos_src }}"
+REMOTE="{{ rclone_remote }}:{{ scaleway_bucket }}"
+LOG="/var/log/backup-rclone-scaleway.log"
+HC_URL="{{ healthchecks_ping_url }}/{{ vault_hc_uuid_rclone_scaleway }}"
+ADMIN="{{ backup_admin_email }}"
+FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
+
+exec >>"$LOG" 2>&1
+echo "===== $(date -Is) rclone → Scaleway ====="
+
+# Library/originals (everything except the DB dumps, which go to their own
+# prefix with a 90-day lifecycle expiry).
+rclone copy "$SRC" "${REMOTE}/library" \
+  --exclude '/backups/**' \
+  --transfers 4 --checkers 8 --stats-one-line --stats 1m
+rc_lib=$?
+
+# DB dumps — the logical source of truth for a DB restore, MUST ship with the
+# photos (limitation #8). Immich writes them to $UPLOAD_LOCATION/backups.
+rclone copy "${SRC}/backups" "${REMOTE}/db-backups" \
+  --transfers 4 --checkers 8 --stats-one-line --stats 1m
+rc_db=$?
+
+# Deadman gate: only ping success if BOTH copies succeeded AND a DB dump landed
+# in the last 25h (a stale dump means Immich's Database Backup silently stopped
+# — the photos copy alone is not a restorable backup, cf. limitation #8).
+fresh_dump=$(find "${SRC}/backups" -type f -mmin -1500 2>/dev/null | head -1)
+
+if [[ $rc_lib -eq 0 && $rc_db -eq 0 && -n "$fresh_dump" ]]; then
+  echo "OK — library rc=$rc_lib db rc=$rc_db, fresh dump: $fresh_dump"
+  curl -fsS -m 15 --retry 3 "$HC_URL" >/dev/null || true
+else
+  echo "FAIL — library rc=$rc_lib db rc=$rc_db, fresh_dump='${fresh_dump:-none}'"
+  printf 'rclone → Scaleway failed on %s\nlibrary rc=%s db rc=%s\nfresh DB dump (<25h): %s\nSee %s\n' \
+    "$(hostname)" "$rc_lib" "$rc_db" "${fresh_dump:-NONE — Immich DB backup stale}" "$LOG" \
+    | mail -r "$FROM" -s "[backup] rclone → Scaleway FAILED" "$ADMIN" || true
+  # No healthchecks ping → the deadman switch fires too. Belt and suspenders.
+  exit 1
+fi

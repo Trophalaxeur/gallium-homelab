@@ -1,0 +1,15 @@
+# Managed by Ansible (backup role). Scaleway Object Storage, S3-compatible.
+# The IAM key here is scoped Put/Get only (Delete*/PutBucketVersioning denied)
+# — see the secret-recreation checklist in docs/backup.md (Scénario 7).
+[{{ rclone_remote }}]
+type = s3
+provider = Scaleway
+env_auth = false
+access_key_id = {{ vault_rclone_scaleway_access_key }}
+secret_access_key = {{ vault_rclone_scaleway_secret_key }}
+region = {{ scaleway_region }}
+endpoint = {{ scaleway_endpoint }}
+acl = private
+# No explicit storage_class: objects inherit the bucket's tier (Scaleway One
+# Zone). Forcing ONEZONE_IA here would add per-object IA minimum-duration
+# billing — not what the plan sized for.

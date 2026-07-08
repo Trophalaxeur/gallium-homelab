@@ -1,0 +1,144 @@
+---
+# backup LXC (105) — runs the isolated data-protection jobs (Étape 4 of
+# ~/.claude/plans/backup-strategy.md): rclone → Scaleway, weekly Object Lock
+# renewal, rclone → HDD. Deliberately holds the ONLY writable HDD mount and the
+# ONLY copy of the Scaleway IAM key in the homelab: a compromise of Immich
+# (the real attack surface) reaches neither (Scénario 6 isolation).
+
+# Step 1 — packages
+# awscli: needed for `aws s3api put-object-retention` (weekly renewal) — rclone
+# cannot extend Object Lock retention on existing objects. rclone: the copy
+# engine. msmtp/mailutils: abort/alert mail, same pattern as neon/bromine.
+- name: Install packages
+  apt:
+    name:
+      - rclone
+      - awscli
+      - cron
+      - curl
+      - jq
+      - msmtp
+      - mailutils
+    state: present
+    update_cache: true
+
+# Step 2 — msmtp (mail on abort; shared vault_smtp_password like neon/bromine)
+- name: Deploy msmtp config
+  template:
+    src: msmtprc.j2
+    dest: /etc/msmtprc
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true   # renders vault_smtp_password
+
+- name: Ensure msmtp log file exists
+  file:
+    path: /var/log/msmtp.log
+    state: touch
+    owner: root
+    group: root
+    mode: "0640"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Set sendmail symlink to msmtp
+  file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+    force: true
+
+# Step 3 — verify the bind-mounts posted by terraform/backup.tf are correct.
+# These are the load-bearing security assumptions of the whole isolation model,
+# so assert them at deploy time rather than trust the Terraform ran cleanly.
+
+# The immich-photos mount MUST be read-only: a successful write here means the
+# ro=1 mount option is missing → the backup jobs could mutate the source of
+# truth. Fail loudly (touch returns 0) instead of silently running unprotected.
+- name: Assert the immich-photos mount is present and read-only
+  ansible.builtin.command: touch {{ backup_photos_src }}/.rw-probe
+  register: ro_probe
+  changed_when: false
+  failed_when: ro_probe.rc == 0
+  # rc != 0 (EROFS/EACCES) is the expected, wanted outcome.
+
+- name: Clean up the probe file if the mount was unexpectedly writable
+  ansible.builtin.file:
+    path: "{{ backup_photos_src }}/.rw-probe"
+    state: absent
+  when: ro_probe.rc == 0
+
+- name: Assert the HDD bind-mount is actually mounted (not an empty dir)
+  ansible.builtin.command: mountpoint -q {{ backup_hdd_mount }}
+  changed_when: false
+  # Fails if /mnt/hdd is a plain directory → the HDD passthrough is missing.
+  # Same failure the runtime job guards against (Scénario 8), checked early.
+
+# Step 4 — rclone remote for Scaleway (S3-compatible). Creds from vault, never
+# in the repo. This file is the crown jewel this LXC isolates from Immich.
+- name: Create rclone config directory
+  file:
+    path: /root/.config/rclone
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy rclone config (Scaleway remote)
+  template:
+    src: rclone.conf.j2
+    dest: /root/.config/rclone/rclone.conf
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true   # renders the Scaleway secret key
+
+# awscli reads the same Scaleway key for the Object Lock renewal job.
+- name: Create aws credentials directory
+  file:
+    path: /root/.aws
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy aws credentials (Scaleway, for object-lock renewal)
+  template:
+    src: aws-credentials.j2
+    dest: /root/.aws/credentials
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+# Step 5 — the three job scripts
+- name: Deploy backup job scripts
+  template:
+    src: "{{ item }}.j2"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - backup-rclone-scaleway.sh
+    - backup-object-lock-renew.sh
+    - backup-rclone-hdd.sh
+
+# Step 6 — crons: Scaleway 02:00, HDD 02:20 (after the DB dump lands), Object
+# Lock renewal Sunday 03:00. Timings chosen so the nightly chain doesn't overlap.
+- name: Deploy backup cron jobs
+  template:
+    src: cron-backup.j2
+    dest: /etc/cron.d/backup-jobs
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy logrotate config for backup job logs
+  template:
+    src: logrotate-backup.j2
+    dest: /etc/logrotate.d/backup
+    owner: root
+    group: root
+    mode: "0644"

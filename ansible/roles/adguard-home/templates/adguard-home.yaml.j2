@@ -109,6 +109,12 @@ filtering:
     - domain: "{{ immich_domain }}"
       answer: "{{ immich_ip }}"
       enabled: true
+    - domain: backup.lan
+      answer: "{{ backup_ip }}"
+      enabled: true
+    - domain: backup.flefevre.fr
+      answer: "{{ backup_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

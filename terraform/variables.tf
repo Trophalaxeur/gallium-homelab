@@ -151,3 +151,23 @@ variable "immich_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- backup ---
+
+variable "backup_vmid" {
+  description = "VMID du conteneur backup (jobs rclone/HDD/object-lock isolés)"
+  type        = number
+  default     = 105
+}
+
+variable "backup_ip" {
+  description = "IP statique du LXC backup"
+  type        = string
+  default     = "192.168.1.64"
+}
+
+variable "backup_lxc_template" {
+  description = "Template LXC pour backup (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Étape 4a-bis — weekly Object Lock renewal (Rétention glissante). Object Lock
+# Compliance makes objects immutable for a FIXED window (90 days here). Without
+# renewal, a photo taken today becomes deletable in 90 days. This job walks the
+# library/ objects still present and pushes their retain-until-date to now+90d,
+# so anything still in the active library stays immutable indefinitely — the
+# real ransomware protection (Scénario 6). Compliance mode only allows EXTENDING
+# a retention date, never shortening: safe to re-run.
+#
+# db-backups/ is intentionally NOT renewed — those dumps are meant to age out at
+# 90 days (bucket lifecycle rule).
+set -uo pipefail
+
+BUCKET="{{ scaleway_bucket }}"
+ENDPOINT="{{ scaleway_endpoint }}"
+REGION="{{ scaleway_region }}"
+PREFIX="library/"
+LOG="/var/log/backup-object-lock-renew.log"
+HC_URL="{{ healthchecks_ping_url }}/{{ vault_hc_uuid_object_lock_renew }}"
+ADMIN="{{ backup_admin_email }}"
+FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
+
+exec >>"$LOG" 2>&1
+echo "===== $(date -Is) Object Lock renewal (${PREFIX}) ====="
+
+RETAIN_UNTIL="$(date -u -d '+{{ object_lock_days }} days' +%Y-%m-%dT%H:%M:%SZ)"
+echo "Extending retain-until-date to ${RETAIN_UNTIL}"
+
+aws_s3api() { aws --endpoint-url "$ENDPOINT" --region "$REGION" s3api "$@"; }
+
+total=0
+failed=0
+# list-objects-v2 auto-paginates. Walk keys, extend each object's retention.
+while IFS= read -r key; do
+  [[ -z "$key" ]] && continue
+  total=$((total + 1))
+  if ! aws_s3api put-object-retention \
+        --bucket "$BUCKET" --key "$key" \
+        --retention "{\"Mode\":\"COMPLIANCE\",\"RetainUntilDate\":\"${RETAIN_UNTIL}\"}" \
+        >/dev/null 2>&1; then
+    failed=$((failed + 1))
+    echo "  FAIL: $key"
+  fi
+done < <(aws_s3api list-objects-v2 --bucket "$BUCKET" --prefix "$PREFIX" \
+           --query 'Contents[].Key' --output text | tr '\t' '\n')
+
+echo "Done — $total objects, $failed failures"
+
+if [[ $failed -eq 0 ]]; then
+  curl -fsS -m 15 --retry 3 "$HC_URL" >/dev/null || true
+else
+  printf 'Object Lock renewal on %s: %s/%s objects FAILED to renew. See %s\n' \
+    "$(hostname)" "$failed" "$total" "$LOG" \
+    | mail -r "$FROM" -s "[backup] Object Lock renewal had failures" "$ADMIN" || true
+  exit 1
+fi

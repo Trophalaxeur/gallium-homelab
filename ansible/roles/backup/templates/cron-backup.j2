@@ -1,0 +1,12 @@
+# Managed by Ansible (backup role). All jobs run as root (single-purpose LXC:
+# root reads the RO photos mount, writes the HDD, owns the rclone/aws creds).
+# MAILTO empty — each script mails the admin itself on failure via msmtp.
+MAILTO=""
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Étape 4a — photos + DB dumps → Scaleway (nightly, after Immich's DB backup)
+0 2 * * *   root /usr/local/bin/backup-rclone-scaleway.sh
+# Étape 4b — photos → external HDD (nightly, 20 min later to avoid I/O overlap)
+20 2 * * *  root /usr/local/bin/backup-rclone-hdd.sh
+# Étape 4a-bis — weekly Object Lock renewal on still-present library/ objects
+0 3 * * 0   root /usr/local/bin/backup-object-lock-renew.sh

@@ -1,0 +1,10 @@
+# Managed by Ansible (backup role). Keep the job logs bounded.
+/var/log/backup-rclone-scaleway.log /var/log/backup-rclone-hdd.log /var/log/backup-object-lock-renew.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
