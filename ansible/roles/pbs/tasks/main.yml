@@ -61,15 +61,19 @@
   when: pbs_token_gen is changed
   no_log: true
 
-# PBS API tokens are always privilege-separated: granting a role to the user
-# does NOT extend to its tokens, each token authid needs its own ACL entry.
-# DatastoreBackup alone lacks Datastore.Modify/Prune, so vzdump's post-backup
-# prune step fails with a permission error. DatastorePowerUser adds Prune+Read
-# (PBS 4.2 renamed the older "DatastoreOperator" role to this).
-- name: Grant DatastorePowerUser to the sync token
+# PBS API tokens are privilege-separated: a token's effective privileges are the
+# INTERSECTION of its own ACL and the owning user's ACL. So both authids need the
+# role, or the token is capped at the lesser set. DatastoreBackup alone lacks
+# Datastore.Prune, so vzdump's post-backup prune step fails; DatastorePowerUser
+# grants Datastore.Backup + Datastore.Prune (verified on PBS 4.2.2 via the
+# /access/roles API — the older "DatastoreOperator" role no longer exists).
+- name: Grant DatastorePowerUser to the sync user and its token
   ansible.builtin.command: >
     proxmox-backup-manager acl update /datastore/{{ pbs_datastore_name }} DatastorePowerUser
-    --auth-id "{{ pbs_sync_user }}!{{ pbs_sync_token_name }}"
+    --auth-id "{{ item }}"
+  loop:
+    - "{{ pbs_sync_user }}"
+    - "{{ pbs_sync_user }}!{{ pbs_sync_token_name }}"
   changed_when: false
 
 - name: Read back the persisted token secret
