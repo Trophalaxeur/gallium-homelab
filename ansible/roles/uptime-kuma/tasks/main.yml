@@ -45,6 +45,9 @@
   args:
     chdir: "{{ uptime_kuma_install_dir }}"
   register: kuma_compose_up
+  # Compose v2 writes container lifecycle status to stderr; check stdout too in
+  # case a wrapper routes it differently.
   changed_when: >
-    'Started' in kuma_compose_up.stderr or 'Created' in kuma_compose_up.stderr
-    or 'Recreate' in kuma_compose_up.stderr
+    'Started' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
+    or 'Created' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
+    or 'Recreate' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
