@@ -43,3 +43,31 @@ immich_admin_email: "admin@flefevre.fr"
 immich_domain: "photos.flefevre.fr"
 immich_version: "v3.0.1"
 smtp_from_immich: "immich@flefevre.fr"
+
+# --- backup ---
+# Isolated LXC (105) that runs the rclone/HDD/object-lock jobs — never Immich
+# itself (Scénario 6 isolation, ~/.claude/plans/backup-strategy.md).
+backup_ip: "192.168.1.64"
+backup_admin_email: "admin@flefevre.fr"
+smtp_from_backup: "backup@flefevre.fr"
+
+# Bind-mount paths INSIDE the backup LXC (posted by terraform/backup.tf):
+#   immich photos, READ-ONLY  ·  external HDD, writable (3rd physical copy)
+backup_photos_src: "/mnt/immich-photos"
+backup_hdd_mount: "/mnt/hdd"
+
+# Scaleway Object Storage (bucket bootstrapped by
+# scripts/scaleway-bucket-bootstrap.sh — Object Lock Compliance + SSE-ONE).
+# ⚠️ scaleway_region MUST match SCW_REGION in scripts/.scaleway-credentials.env.
+scaleway_bucket: "homelab-photos-backup"
+scaleway_region: "fr-par"
+scaleway_endpoint: "https://s3.fr-par.scw.cloud"
+# rclone remote name written into /root/.config/rclone/rclone.conf
+rclone_remote: "scaleway"
+# Object Lock Compliance window (days) re-applied on every upload and renewed
+# weekly on still-present library/ objects (Rétention glissante).
+object_lock_days: 90
+
+# healthchecks.io deadman switches. Ping host (self-hosted? change here). Each
+# job pings {{ healthchecks_ping_url }}/{{ vault_hc_uuid_* }} on success.
+healthchecks_ping_url: "https://hc-ping.com"

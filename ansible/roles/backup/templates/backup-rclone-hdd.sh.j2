@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Étape 4b — nightly copy to the always-on external HDD (3rd physical copy,
+# completes 3-2-1). PLAINTEXT on purpose: readable with zero keys in a
+# "everything else is gone" recovery.
+#
+# Two hazards this guards against:
+#  1. HDD not mounted (Scénario 8): without the mountpoint check, rclone would
+#     happily write into the LXC rootfs — a silent fake success. Abort, no ping.
+#  2. Overwrite-in-place (Scénario 5): a classic filesystem has no versioning,
+#     so an edited/corrupted file would overwrite its good copy with no trace.
+#     --backup-dir moves the previous version into a dated folder first.
+set -uo pipefail
+
+SRC="{{ backup_photos_src }}"
+HDD="{{ backup_hdd_mount }}"
+DEST="${HDD}/immich-photos"
+LOG="/var/log/backup-rclone-hdd.log"
+HC_URL="{{ healthchecks_ping_url }}/{{ vault_hc_uuid_rclone_hdd }}"
+ADMIN="{{ backup_admin_email }}"
+FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
+
+exec >>"$LOG" 2>&1
+echo "===== $(date -Is) rclone → HDD ====="
+
+if ! mountpoint -q "$HDD"; then
+  echo "ABORT — $HDD is not a mountpoint (HDD unplugged/unmounted)"
+  printf 'HDD backup aborted on %s: %s is not mounted.\nNo data written, no healthchecks ping (deadman will fire).\n' \
+    "$(hostname)" "$HDD" | mail -r "$FROM" -s "[backup] HDD not mounted — backup skipped" "$ADMIN" || true
+  exit 1
+fi
+
+rclone copy "$SRC" "$DEST" \
+  --backup-dir "${HDD}/.versions/$(date +%F)" \
+  --transfers 4 --checkers 8 --stats-one-line --stats 1m
+rc=$?
+
+if [[ $rc -eq 0 ]]; then
+  echo "OK — rc=$rc"
+  curl -fsS -m 15 --retry 3 "$HC_URL" >/dev/null || true
+else
+  echo "FAIL — rc=$rc"
+  printf 'rclone → HDD failed on %s (rc=%s). See %s\n' "$(hostname)" "$rc" "$LOG" \
+    | mail -r "$FROM" -s "[backup] rclone → HDD FAILED" "$ADMIN" || true
+  exit 1
+fi
