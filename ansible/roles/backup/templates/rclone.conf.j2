@@ -1,6 +1,9 @@
 # Managed by Ansible (backup role). Scaleway Object Storage, S3-compatible.
-# The IAM key here is scoped Put/Get only (Delete*/PutBucketVersioning denied)
-# — see the secret-recreation checklist in docs/backup.md (Scénario 7).
+# The IAM key here is scoped to the minimum the backup jobs need: PutObject +
+# GetObject + ListBucket (rclone copy) and PutObjectRetention (the weekly Object
+# Lock renewal job, cf. aws-credentials.j2). Delete*/PutBucketVersioning/
+# PutObjectLockConfiguration stay denied — see the secret-recreation checklist
+# in docs/backup.md (Scénario 7).
 [{{ rclone_remote }}]
 type = s3
 provider = Scaleway

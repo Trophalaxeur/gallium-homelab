@@ -16,7 +16,7 @@
       - awscli
       - cron
       - curl
-      - jq
+      - logrotate
       - msmtp
       - mailutils
     state: present
