@@ -1,0 +1,15 @@
+# Managed by Ansible (uptime-kuma role). Self-hosted heartbeat + service
+# monitoring. Version pinned via uptime_kuma_version (group_vars) — never :latest.
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:{{ uptime_kuma_version }}
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      # Bound on all interfaces so the backup LXC (and a browser on the LAN)
+      # can reach it. LAN-only by network topology — not port-forwarded.
+      - "{{ uptime_kuma_port }}:3001"
+    volumes:
+      # SQLite DB + config. Lives on the LXC rootfs → swept into PBS with the
+      # container (config is small and recreatable, no dedicated dataset).
+      - ./data:/app/data

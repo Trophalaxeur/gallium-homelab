@@ -15,7 +15,7 @@ SRC="{{ backup_photos_src }}"
 HDD="{{ backup_hdd_mount }}"
 DEST="${HDD}/immich-photos"
 LOG="/var/log/backup-rclone-hdd.log"
-HC_URL="{{ healthchecks_ping_url }}/{{ vault_hc_uuid_rclone_hdd }}"
+KUMA_URL="{{ uptime_kuma_push_base }}/{{ vault_kuma_push_rclone_hdd }}"
 ADMIN="{{ backup_admin_email }}"
 FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
 
@@ -24,8 +24,10 @@ echo "===== $(date -Is) rclone → HDD ====="
 
 if ! mountpoint -q "$HDD"; then
   echo "ABORT — $HDD is not a mountpoint (HDD unplugged/unmounted)"
-  printf 'HDD backup aborted on %s: %s is not mounted.\nNo data written, no healthchecks ping (deadman will fire).\n' \
+  printf 'HDD backup aborted on %s: %s is not mounted.\nNo data written.\n' \
     "$(hostname)" "$HDD" | mail -r "$FROM" -s "[backup] HDD not mounted — backup skipped" "$ADMIN" || true
+  curl -fsS -m 15 -G "$KUMA_URL" \
+    --data-urlencode "status=down" --data-urlencode "msg=HDD not mounted" >/dev/null || true
   exit 1
 fi
 
@@ -36,10 +38,13 @@ rc=$?
 
 if [[ $rc -eq 0 ]]; then
   echo "OK — rc=$rc"
-  curl -fsS -m 15 --retry 3 "$HC_URL" >/dev/null || true
+  curl -fsS -m 15 --retry 3 -G "$KUMA_URL" \
+    --data-urlencode "status=up" --data-urlencode "msg=OK" >/dev/null || true
 else
   echo "FAIL — rc=$rc"
   printf 'rclone → HDD failed on %s (rc=%s). See %s\n' "$(hostname)" "$rc" "$LOG" \
     | mail -r "$FROM" -s "[backup] rclone → HDD FAILED" "$ADMIN" || true
+  curl -fsS -m 15 -G "$KUMA_URL" \
+    --data-urlencode "status=down" --data-urlencode "msg=rclone-hdd failed" >/dev/null || true
   exit 1
 fi

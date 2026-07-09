@@ -1,0 +1,5 @@
+---
+uptime_kuma_install_dir: /opt/uptime-kuma
+# Host port Kuma listens on (LAN only, plain HTTP — internal monitoring, no
+# public exposure, so no Caddy/cert unlike immich/bromine).
+uptime_kuma_port: 3001

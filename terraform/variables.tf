@@ -171,3 +171,23 @@ variable "backup_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- uptime (Uptime Kuma) ---
+
+variable "uptime_vmid" {
+  description = "VMID du conteneur Uptime Kuma (monitoring/heartbeat)"
+  type        = number
+  default     = 106
+}
+
+variable "uptime_ip" {
+  description = "IP statique du LXC Uptime Kuma"
+  type        = string
+  default     = "192.168.1.65"
+}
+
+variable "uptime_lxc_template" {
+  description = "Template LXC pour Uptime Kuma (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}
