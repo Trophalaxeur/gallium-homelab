@@ -1,0 +1,33 @@
+{
+  "Version": "2023-04-17",
+  "Id": "backup-lxc-scoped",
+  "Statement": [
+    {
+      "Sid": "OwnerFullAccess",
+      "Effect": "Allow",
+      "Principal": { "SCW": "__OWNER_PRINCIPAL__" },
+      "Action": [ "s3:*" ],
+      "Resource": [
+        "homelab-photos-backup",
+        "homelab-photos-backup/*"
+      ]
+    },
+    {
+      "Sid": "BackupReadWriteRetainOnly",
+      "Effect": "Allow",
+      "Principal": { "SCW": "application_id:__SCOPED_APPLICATION_ID__" },
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:GetObjectRetention",
+        "s3:PutObjectRetention"
+      ],
+      "Resource": [
+        "homelab-photos-backup",
+        "homelab-photos-backup/*"
+      ]
+    }
+  ]
+}

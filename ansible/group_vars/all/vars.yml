@@ -55,6 +55,10 @@ smtp_from_backup: "backup@flefevre.fr"
 #   immich photos, READ-ONLY  ·  external HDD, writable (3rd physical copy)
 backup_photos_src: "/mnt/immich-photos"
 backup_hdd_mount: "/mnt/hdd"
+# HDD mount point on the Proxmox HOST (fstab, Étape 0-bis). Chowned to the
+# backup LXC's mapped root (100000) so the unprivileged LXC can write to it —
+# same fix as the immich-photos dataset (see the proxmox play in playbook.yml).
+backup_hdd_host_mount: "/mnt/hdd-external"
 
 # Scaleway Object Storage (bucket bootstrapped by
 # scripts/scaleway-bucket-bootstrap.sh — Object Lock Compliance + SSE-ONE).

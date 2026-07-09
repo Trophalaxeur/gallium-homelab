@@ -392,6 +392,47 @@
   roles:
     - zfs-maintenance
 
+# The external HDD (WD Red) is mounted host-side on {{ backup_hdd_host_mount }}
+# (Étape 0-bis, fstab) and bind-mounted into the unprivileged backup LXC as
+# /mnt/hdd (terraform/backup.tf). Like the immich-photos dataset, an
+# unprivileged LXC maps its root to host uid/gid 100000 — so the mount root must
+# be owned by 100000:100000, else the backup LXC's rclone→HDD job gets EACCES
+# (mkdir denied). Same fix as the "Own the immich-photos dataset ..." task above.
+- name: Prepare the external HDD for the unprivileged backup LXC
+  hosts: proxmox
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+    - name: Gather facts
+      ansible.builtin.gather_facts:
+      tags: always
+
+  tasks:
+    # Guard: chowning the path while the HDD is NOT mounted would chown the empty
+    # rootfs dir under the mountpoint instead of the real filesystem — and the
+    # actual HDD would stay root-owned. Refuse rather than "succeed" wrongly
+    # (same failure class as the rclone→HDD mountpoint check, Scénario 8).
+    - name: Ensure the HDD is actually mounted before chowning
+      ansible.builtin.command: mountpoint -q {{ backup_hdd_host_mount }}
+      changed_when: false
+
+    - name: Own the HDD mount root by the backup LXC's mapped root uid/gid
+      ansible.builtin.file:
+        path: "{{ backup_hdd_host_mount }}"
+        owner: "100000"
+        group: "100000"
+        state: directory
+
 # Uptime Kuma (LXC 106) — self-hosted heartbeat monitor + active service probes.
 # Deployed BEFORE the backup play so the push endpoint exists when the backup
 # jobs fire. No vault vars: Kuma is configured through its own UI (create the 3
