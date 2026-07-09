@@ -51,3 +51,97 @@
     'Started' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
     or 'Created' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
     or 'Recreate' in (kuma_compose_up.stderr + kuma_compose_up.stdout)
+
+# --- TLS reverse proxy (Caddy) — same pattern as immich (immich role) ---
+# Cert issued on the AdGuard LXC (acme.sh, DNS-01) and pushed to /etc/caddy/cert
+# over SSH by the `uptime-cert` role. HTTPS is for the human dashboard only:
+# the backup jobs keep pushing over http://uptime.lan:3001 (see Caddyfile.j2).
+
+- name: Create /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add Caddy signing key
+  ansible.builtin.get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /etc/apt/keyrings/caddy-stable.asc
+    mode: "0644"
+    force: false
+
+- name: Add Caddy APT repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/caddy-stable.asc] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
+    mode: "0644"
+
+# Installing the package creates the `caddy` user/group — created BEFORE
+# certdeploy so certdeploy's primary group can be caddy (cert files it writes
+# are then caddy-readable without a post-write chgrp).
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+- name: Create certdeploy user (target of the acme.sh ssh deploy-hook)
+  ansible.builtin.user:
+    name: certdeploy
+    system: true
+    shell: /bin/bash
+    group: caddy
+    create_home: true
+    state: present
+
+- name: Create Caddy cert directory
+  ansible.builtin.file:
+    path: /etc/caddy/cert
+    state: directory
+    owner: certdeploy
+    group: caddy
+    mode: "0750"
+
+# This Debian template doesn't ship sudo — needed for the certdeploy sudoers rule.
+- name: Install sudo
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+
+# Public half of the keypair generated on adguard (playbook.yml adguard play).
+# Skipped when adguard isn't in scope — run `--limit adguard,uptime` to sync.
+- name: Authorize the deploy key for certdeploy (source-restricted)
+  ansible.posix.authorized_key:
+    user: certdeploy
+    state: present
+    key: "{{ hostvars[groups['adguard'][0]]['uptime_cert_deploy_pubkey'] }}"
+    key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
+    exclusive: true
+  when: hostvars[groups['adguard'][0]]['uptime_cert_deploy_pubkey'] is defined
+
+- name: Grant certdeploy a one-command sudoers rule (reload Caddy only)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/certdeploy
+    content: |
+      certdeploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart caddy
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Deploy Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: caddy
+    mode: "0640"
+  notify: Reload caddy
+
+# Enabled so it comes up on boot; NOT started here — Caddy refuses to start
+# while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).
+# The uptime-cert role's ssh deploy-hook runs `systemctl restart caddy` right
+# after landing the cert, which starts it the first time.
+- name: Enable Caddy service
+  ansible.builtin.systemd:
+    name: caddy
+    enabled: true

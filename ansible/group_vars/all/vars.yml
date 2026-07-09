@@ -78,6 +78,11 @@ uptime_kuma_push_base: "http://{{ uptime_ip }}:3001/api/push"
 
 # --- uptime (Uptime Kuma) ---
 uptime_ip: "192.168.1.65"
+# Public-facing TLS name (real Let's Encrypt cert, same acme-on-adguard pattern
+# as immich/bromine). Resolves internally (AdGuard rewrite → .65), never
+# port-forwarded — HTTPS is for the human dashboard only; the backup jobs still
+# push over http://uptime.lan:3001 (unchanged).
+uptime_domain: "uptime.flefevre.fr"
 # Pinned (never :latest). Stable v1 line — verify the latest patch tag on
 # https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping.
 uptime_kuma_version: "1.23.16"
