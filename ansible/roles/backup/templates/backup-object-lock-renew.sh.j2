@@ -28,11 +28,24 @@ echo "Extending retain-until-date to ${RETAIN_UNTIL}"
 
 aws_s3api() { aws --endpoint-url "$ENDPOINT" --region "$REGION" s3api "$@"; }
 
+# Capture the key list first so a failed list-objects-v2 (auth/network) aborts
+# LOUDLY instead of feeding an empty stream to the loop and pinging success.
+# list-objects-v2 auto-paginates. --output text yields "None" when the bucket
+# has no matching objects — skip that sentinel rather than treat it as a key.
+if ! keys="$(aws_s3api list-objects-v2 --bucket "$BUCKET" --prefix "$PREFIX" \
+               --query 'Contents[].Key' --output text)"; then
+  echo "  FAIL: list-objects-v2 (auth/network?) — aborting without pinging OK"
+  printf 'Object Lock renewal on %s: list-objects-v2 FAILED. See %s\n' \
+    "$(hostname)" "$LOG" \
+    | mail -r "$FROM" -s "[backup] Object Lock renewal could not list objects" "$ADMIN" || true
+  exit 1
+fi
+
 total=0
 failed=0
-# list-objects-v2 auto-paginates. Walk keys, extend each object's retention.
+# Walk keys, extend each object's retention.
 while IFS= read -r key; do
-  [[ -z "$key" ]] && continue
+  [[ -z "$key" || "$key" == "None" ]] && continue
   total=$((total + 1))
   if ! aws_s3api put-object-retention \
         --bucket "$BUCKET" --key "$key" \
@@ -41,8 +54,7 @@ while IFS= read -r key; do
     failed=$((failed + 1))
     echo "  FAIL: $key"
   fi
-done < <(aws_s3api list-objects-v2 --bucket "$BUCKET" --prefix "$PREFIX" \
-           --query 'Contents[].Key' --output text | tr '\t' '\n')
+done < <(printf '%s\n' "$keys" | tr '\t' '\n')
 
 echo "Done — $total objects, $failed failures"
 

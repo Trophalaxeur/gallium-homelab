@@ -58,9 +58,9 @@ resource "proxmox_virtual_environment_container" "backup" {
   # apply fails on THIS block until the mount is posted manually. Procedure:
   #   1) Comment out both mount_point blocks below.
   #   2) `terraform apply` — creates the LXC without the mounts.
-  #   3) On the Proxmox root console, post them by hand:
-  #        pct set 105 -mp0 /rpool/data/immich-photos,mp=/mnt/immich-photos,ro=1,backup=0
-  #        pct set 105 -mp1 /mnt/hdd-external,mp=/mnt/hdd,backup=0
+  #   3) On the Proxmox root console, post them by hand (<vmid> = var.backup_vmid):
+  #        pct set <vmid> -mp0 /rpool/data/immich-photos,mp=/mnt/immich-photos,ro=1,backup=0
+  #        pct set <vmid> -mp1 /mnt/hdd-external,mp=/mnt/hdd,backup=0
   #   4) Uncomment both blocks and re-run `terraform apply` — no diff expected.
   mount_point {
     volume    = "/rpool/data/immich-photos"

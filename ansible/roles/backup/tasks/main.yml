@@ -53,21 +53,17 @@
 # These are the load-bearing security assumptions of the whole isolation model,
 # so assert them at deploy time rather than trust the Terraform ran cleanly.
 
-# The immich-photos mount MUST be read-only: a successful write here means the
-# ro=1 mount option is missing → the backup jobs could mutate the source of
-# truth. Fail loudly (touch returns 0) instead of silently running unprotected.
+# The immich-photos mount MUST be present AND read-only. findmnt fails (rc != 0)
+# when the path is not a mountpoint at all — catching the case where the bind-
+# mount is missing entirely, which a plain `touch` probe would wrongly accept
+# (ENOENT and EROFS both return non-zero). We then require `ro` in the options:
+# a missing ro=1 means the backup jobs could mutate the source of truth.
 - name: Assert the immich-photos mount is present and read-only
-  ansible.builtin.command: touch {{ backup_photos_src }}/.rw-probe
-  register: ro_probe
+  ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_photos_src }}
+  register: photos_mnt
   changed_when: false
-  failed_when: ro_probe.rc == 0
-  # rc != 0 (EROFS/EACCES) is the expected, wanted outcome.
-
-- name: Clean up the probe file if the mount was unexpectedly writable
-  ansible.builtin.file:
-    path: "{{ backup_photos_src }}/.rw-probe"
-    state: absent
-  when: ro_probe.rc == 0
+  failed_when: photos_mnt.rc != 0 or 'ro' not in photos_mnt.stdout.split(',')
+  # rc != 0 → not mounted (missing bind-mount); 'ro' absent → not read-only.
 
 - name: Assert the HDD bind-mount is actually mounted (not an empty dir)
   ansible.builtin.command: mountpoint -q {{ backup_hdd_mount }}
@@ -124,6 +120,7 @@
     - backup-rclone-scaleway.sh
     - backup-object-lock-renew.sh
     - backup-rclone-hdd.sh
+  no_log: true   # scripts embed vault values (Healthchecks UUIDs) — no --diff leak
 
 # Step 6 — crons: Scaleway 02:00, HDD 02:20 (after the DB dump lands), Object
 # Lock renewal Sunday 03:00. Timings chosen so the nightly chain doesn't overlap.
