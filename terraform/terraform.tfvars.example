@@ -36,6 +36,10 @@ backup_vmid         = 105
 backup_ip           = "192.168.1.64"
 backup_lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 
+uptime_vmid         = 106
+uptime_ip           = "192.168.1.65"
+uptime_lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
 # Secrets — ne jamais committer terraform.tfvars
 proxmox_api_token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 root_password     = ""

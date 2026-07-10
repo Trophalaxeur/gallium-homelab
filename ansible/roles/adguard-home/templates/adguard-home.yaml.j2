@@ -115,6 +115,12 @@ filtering:
     - domain: backup.flefevre.fr
       answer: "{{ backup_ip }}"
       enabled: true
+    - domain: uptime.lan
+      answer: "{{ uptime_ip }}"
+      enabled: true
+    - domain: uptime.flefevre.fr
+      answer: "{{ uptime_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

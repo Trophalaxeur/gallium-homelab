@@ -55,6 +55,10 @@ smtp_from_backup: "backup@flefevre.fr"
 #   immich photos, READ-ONLY  ·  external HDD, writable (3rd physical copy)
 backup_photos_src: "/mnt/immich-photos"
 backup_hdd_mount: "/mnt/hdd"
+# HDD mount point on the Proxmox HOST (fstab, Étape 0-bis). Chowned to the
+# backup LXC's mapped root (100000) so the unprivileged LXC can write to it —
+# same fix as the immich-photos dataset (see the proxmox play in playbook.yml).
+backup_hdd_host_mount: "/mnt/hdd-external"
 
 # Scaleway Object Storage (bucket bootstrapped by
 # scripts/scaleway-bucket-bootstrap.sh — Object Lock Compliance + SSE-ONE).
@@ -68,6 +72,21 @@ rclone_remote: "scaleway"
 # weekly on still-present library/ objects (Rétention glissante).
 object_lock_days: 90
 
-# healthchecks.io deadman switches. Ping host (self-hosted? change here). Each
-# job pings {{ healthchecks_ping_url }}/{{ vault_hc_uuid_* }} on success.
-healthchecks_ping_url: "https://hc-ping.com"
+# Deadman switches → self-hosted Uptime Kuma (LXC 106). Each backup job pushes
+# to {{ uptime_kuma_push_base }}/{{ vault_kuma_push_* }} (?status=up on success,
+# ?status=down on failure). Kuma alerts when a push is late = a silently-dead
+# cron, even while gallium is otherwise healthy. Not off-site on purpose: a
+# whole-gallium outage is self-evident (Immich down), so the monitor lives in
+# the LAN it watches (decision 2026-07-08).
+uptime_kuma_push_base: "http://{{ uptime_ip }}:3001/api/push"
+
+# --- uptime (Uptime Kuma) ---
+uptime_ip: "192.168.1.65"
+# Public-facing TLS name (real Let's Encrypt cert, same acme-on-adguard pattern
+# as immich/bromine). Resolves internally (AdGuard rewrite → .65), never
+# port-forwarded — HTTPS is for the human dashboard only; the backup jobs still
+# push over http://uptime.lan:3001 (unchanged).
+uptime_domain: "uptime.flefevre.fr"
+# Pinned (never :latest). Stable v1 line — verify the latest patch tag on
+# https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping.
+uptime_kuma_version: "1.23.16"

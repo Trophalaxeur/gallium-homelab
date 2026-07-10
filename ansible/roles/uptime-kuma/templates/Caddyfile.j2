@@ -1,0 +1,14 @@
+# Managed by Ansible (uptime-kuma role) — do not edit on the host.
+#
+# Same pattern as immich/bromine: cert issued on the AdGuard LXC (acme.sh,
+# DNS-01) and pushed here over SSH (uptime-cert role) — Caddy only terminates
+# TLS on :443 and reverse-proxies to the Kuma container (Docker-published on
+# :3001). Caddy handles Kuma's WebSocket (socket.io) transparently.
+#
+# NOTE: :3001 stays open on the LAN on purpose — the backup jobs push to
+# http://uptime.lan:3001/api/push/... directly (no TLS needed machine-to-
+# machine on the LAN). HTTPS here is for the human dashboard only.
+{{ uptime_domain }} {
+    tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
+    reverse_proxy 127.0.0.1:{{ uptime_kuma_port }}
+}

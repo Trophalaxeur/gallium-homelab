@@ -13,7 +13,7 @@ set -uo pipefail
 SRC="{{ backup_photos_src }}"
 REMOTE="{{ rclone_remote }}:{{ scaleway_bucket }}"
 LOG="/var/log/backup-rclone-scaleway.log"
-HC_URL="{{ healthchecks_ping_url }}/{{ vault_hc_uuid_rclone_scaleway }}"
+KUMA_URL="{{ uptime_kuma_push_base }}/{{ vault_kuma_push_rclone_scaleway }}"
 ADMIN="{{ backup_admin_email }}"
 FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
 
@@ -40,12 +40,16 @@ fresh_dump=$(find "${SRC}/backups" -type f -mmin -1500 2>/dev/null | head -1)
 
 if [[ $rc_lib -eq 0 && $rc_db -eq 0 && -n "$fresh_dump" ]]; then
   echo "OK — library rc=$rc_lib db rc=$rc_db, fresh dump: $fresh_dump"
-  curl -fsS -m 15 --retry 3 "$HC_URL" >/dev/null || true
+  curl -fsS -m 15 --retry 3 -G "$KUMA_URL" \
+    --data-urlencode "status=up" --data-urlencode "msg=OK" >/dev/null || true
 else
   echo "FAIL — library rc=$rc_lib db rc=$rc_db, fresh_dump='${fresh_dump:-none}'"
   printf 'rclone → Scaleway failed on %s\nlibrary rc=%s db rc=%s\nfresh DB dump (<25h): %s\nSee %s\n' \
     "$(hostname)" "$rc_lib" "$rc_db" "${fresh_dump:-NONE — Immich DB backup stale}" "$LOG" \
     | mail -r "$FROM" -s "[backup] rclone → Scaleway FAILED" "$ADMIN" || true
-  # No healthchecks ping → the deadman switch fires too. Belt and suspenders.
+  # Explicit down push (faster than waiting for the missed-heartbeat timeout);
+  # a dead cron that never runs still trips Kuma via the absent push.
+  curl -fsS -m 15 -G "$KUMA_URL" \
+    --data-urlencode "status=down" --data-urlencode "msg=rclone-scaleway failed" >/dev/null || true
   exit 1
 fi
