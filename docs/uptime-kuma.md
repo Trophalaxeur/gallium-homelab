@@ -77,7 +77,8 @@ heartbeat window; a late ping flips the monitor to **DOWN**:
 Each job pushes `?status=up` on success and an explicit `?status=down` on
 failure (immediate alert, on top of the late-heartbeat safety net). The push
 tokens are stored in the vault (`vault_kuma_push_rclone_scaleway`,
-`_rclone_hdd`, `_object_lock_renew`) and rendered into the job scripts by the
+`vault_kuma_push_rclone_hdd`, `vault_kuma_push_object_lock_renew`) and rendered
+into the job scripts by the
 `backup` role — see [backup.md](backup.md#the-backup-jobs).
 
 **Optional active probes** (not yet created): HTTP checks on

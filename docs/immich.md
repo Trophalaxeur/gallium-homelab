@@ -28,8 +28,8 @@ itself.
 | OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
 
 **Sized for ML.** Immich runs full machine learning (face recognition + CLIP
-smart search) — deliberately not throttled (decision Révision 3,
-`backup-strategy.md`). 4 vCPU / 6 GB is generous for a homelab library; the
+smart search) — deliberately not throttled. 4 vCPU / 6 GB is generous for a
+homelab library; the
 initial import indexes everything and will use the CPU hard for a while.
 Verified 2026-07-06: gallium has 30 GiB RAM / 21 GiB free before this LXC, so
 6 GB dedicated fits with room to spare.

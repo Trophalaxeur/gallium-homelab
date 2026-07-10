@@ -34,7 +34,7 @@ This document lists every secret used in this project, where it lives, and how t
 | `vault_bromine_allowed_emails` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_immich_db_password` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` (scoped IAM key) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
-| `vault_kuma_push_rclone_scaleway` / `_rclone_hdd` / `_object_lock_renew` (deadman tokens) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
+| `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` (deadman tokens) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | Immich SMTP app password | Immich DB (set in the UI, not IaC) | No |
 | Scaleway bootstrap creds | `scripts/.scaleway-credentials.env` | No (gitignored) |
 | ansible-vault password | Password manager only | No |
@@ -111,10 +111,10 @@ for the full list and where to regenerate each. Highlights:
 | Secret | How to regenerate |
 |---|---|
 | `vault_anthropic_api_token` | Anthropic console → API keys. |
-| `vault_google_client_id` / `_client_secret` | Google Cloud console → OAuth credentials. |
+| `vault_google_client_id` / `vault_google_client_secret` | Google Cloud console → OAuth credentials. |
 | `vault_immich_db_password` | New value **before first Immich start**; on restore it must match the dump's role password. |
-| `vault_rclone_scaleway_access_key` / `_secret_key` | Scaleway → IAM → regenerate a **scoped** key on `homelab-photos-backup` (kept in LastPass "Scaleway Gallium backup API key"). Distinct provider account from `online_api_key`. |
-| `vault_kuma_push_*` | Recreate the three Push monitors in the Uptime Kuma UI, copy each token back into the vault. |
+| `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` | Scaleway → IAM → regenerate a **scoped** key on `homelab-photos-backup` (kept in LastPass "Scaleway Gallium backup API key"). Distinct provider account from `online_api_key`. |
+| `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` | Recreate the three Push monitors in the Uptime Kuma UI, copy each token back into the vault. |
 | Immich SMTP app password | New Gmail App Password, re-entered in the Immich UI (stored in the Immich DB, not the vault). |
 
 ### SSH key lost

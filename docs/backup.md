@@ -255,11 +255,11 @@ re-enter each value:
 | `vault_gh_admin_token` | GitHub PAT (classic, `repo`) — deploy-key registration only. |
 | `vault_multica_pat` | multica.ai → Settings → API tokens. |
 | `vault_anthropic_api_token` | Anthropic console (bromine backend). |
-| `vault_google_client_id` / `_client_secret` | Google Cloud console (bromine OAuth). |
+| `vault_google_client_id` / `vault_google_client_secret` | Google Cloud console (bromine OAuth). |
 | `vault_bromine_allowed_emails` | Known list — re-enter. |
 | `vault_immich_db_password` | Choose a new one **before first Immich start**; the DB is initialized with it. On restore into an existing dump, it must match the dump's role password. |
-| `vault_rclone_scaleway_access_key` / `_secret_key` | Scaleway console → IAM → regenerate a **scoped** key on `homelab-photos-backup` (Put/Get/List/PutObjectRetention; deny Delete*/PutBucketVersioning). Distinct from `online_api_key` — different provider account. Kept in **LastPass** ("Scaleway Gallium backup API key"). |
-| `vault_kuma_push_rclone_scaleway` / `_rclone_hdd` / `_object_lock_renew` | Create three Push monitors in the Kuma UI, copy each token into the vault. |
+| `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` | Scaleway console → IAM → regenerate a **scoped** key on `homelab-photos-backup` (Put/Get/List/PutObjectRetention; deny Delete*/PutBucketVersioning). Distinct from `online_api_key` — different provider account. Kept in **LastPass** ("Scaleway Gallium backup API key"). |
+| `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` | Create three Push monitors in the Kuma UI, copy each token into the vault. |
 | Immich SMTP app password | New Gmail App Password — entered in the **Immich UI** (Settings → Notifications), stored in the Immich DB, not our IaC. |
 | Scaleway bootstrap creds (`scripts/.scaleway-credentials.env`) | Bootstrap-only (bucket already exists, Object Lock irreversible) — regenerate only to re-run the bootstrap script. |
 | ansible-vault password / `.vault_pass` | New vault password of your choosing (re-encrypts the recreated `vault.yml`). |
@@ -281,7 +281,7 @@ rebuilt with `terraform import` per LXC; `ansible-playbook` reconciles the rest.
 The Proxmox host's own config is **not** captured by Terraform/Ansible and must
 be reapplied by hand on scenarios 3 and 4:
 
-- **Network:** bridge `vmbr0` on the physical NICs (see `homelab.md`).
+- **Network:** bridge `vmbr0` on the physical NIC(s).
 - **Storage:** `rpool` ZFS pool (`zpool import rpool` if the disk survived),
   local template store, PBS storage registration (`pvesm add pbs …` — the API
   token ACL must be granted to the full `user!token` authid, privilege-separated).
