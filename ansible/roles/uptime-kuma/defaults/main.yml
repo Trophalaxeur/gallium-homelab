@@ -1,5 +1,6 @@
 ---
 uptime_kuma_install_dir: /opt/uptime-kuma
-# Host port Kuma listens on (LAN only, plain HTTP — internal monitoring, no
-# public exposure, so no Caddy/cert unlike immich/bromine).
+# Host port Kuma listens on. Backup jobs push over plain HTTP to this port
+# (http://uptime.lan:3001); the human dashboard is fronted by Caddy with a
+# Let's Encrypt cert (uptime-cert role), same pattern as immich.
 uptime_kuma_port: 3001

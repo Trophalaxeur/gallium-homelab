@@ -120,7 +120,7 @@
     exclusive: true
   when: hostvars[groups['adguard'][0]]['uptime_cert_deploy_pubkey'] is defined
 
-- name: Grant certdeploy a one-command sudoers rule (reload Caddy only)
+- name: Grant certdeploy a one-command sudoers rule (restart Caddy only)
   ansible.builtin.copy:
     dest: /etc/sudoers.d/certdeploy
     content: |
