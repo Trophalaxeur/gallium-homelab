@@ -156,6 +156,14 @@ must be updated on **every** Immich upgrade.
 
 ## Update / maintenance
 
+### Bulk import from Google Photos
+
+Migrating a full Google Photos library in is a one-shot runtime operation, not part
+of the IaC. The reproducible procedure — single-pass `immich-go` import staged on the
+ZFS dataset and pulled from Google Drive via rclone, with the metadata/duplicate
+pitfalls — lives in
+[immich-google-photos-import.md](immich-google-photos-import.md).
+
 ### Upgrade Immich
 
 1. Check the [Immich release notes](https://github.com/immich-app/immich/releases)
