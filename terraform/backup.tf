@@ -40,7 +40,7 @@ resource "proxmox_virtual_environment_container" "backup" {
 
   disk {
     datastore_id = var.lxc_datastore
-    # rootfs only (rclone, awscli, scripts, logs). Photos/HDD are bind-mounts
+    # rootfs only (rclone, boto3, scripts, logs). Photos/HDD are bind-mounts
     # below, never on this disk. ~5 Go per the space calc in
     # ~/.claude/plans/backup-strategy.md.
     size = 5
