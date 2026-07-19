@@ -3,7 +3,7 @@
 # Storage. The bucket has a DEFAULT Object Lock retention (Compliance, 90 days)
 # set at creation (scripts/scaleway-bucket-bootstrap.sh), so every freshly PUT
 # object is locked automatically — no per-object flag needed here. Weekly
-# renewal (backup-object-lock-renew.sh) keeps still-present photos locked past
+# renewal (backup-object-lock-renew.py) keeps still-present photos locked past
 # their original 90 days (Rétention glissante).
 #
 # rclone COPY (never sync/delete): a deletion in Immich must not propagate to

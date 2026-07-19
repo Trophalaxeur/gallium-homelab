@@ -12,7 +12,7 @@
 # {{ object_lock_days }} days (bucket lifecycle rule).
 #
 # boto3 rewrite of the former per-object `aws` shell loop: one in-process S3
-# client shared across a thread pool, so the {{ object_lock_days }}k+ retention calls run
+# client shared across a thread pool, so the per-object retention calls run
 # concurrently instead of spawning a fresh Python interpreter per object. Turns
 # a multi-hour, one-CPU-pinned run into minutes. Same log/Kuma/mail contract.
 
