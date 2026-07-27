@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+# Étape 4a-bis — weekly Object Lock renewal (Rétention glissante). Object Lock
+# Compliance makes objects immutable for a FIXED window ({{ object_lock_days }} days here).
+# Without renewal, a photo taken today becomes deletable in {{ object_lock_days }} days.
+# This job walks the library/ objects still present and pushes their
+# retain-until-date to now+{{ object_lock_days }}d, so anything still in the active library
+# stays immutable indefinitely — the real ransomware protection (Scénario 6).
+# Compliance mode only allows EXTENDING a retention date, never shortening:
+# safe to re-run.
+#
+# db-backups/ is intentionally NOT renewed — those dumps are meant to age out at
+# {{ object_lock_days }} days (bucket lifecycle rule).
+#
+# boto3 rewrite of the former per-object `aws` shell loop: one in-process S3
+# client shared across a thread pool, so the per-object retention calls run
+# concurrently instead of spawning a fresh Python interpreter per object. Turns
+# a multi-hour, one-CPU-pinned run into minutes. Same log/Kuma/mail contract.
+
+import datetime
+import os
+import socket
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
+
+BUCKET = "{{ scaleway_bucket }}"
+ENDPOINT = "{{ scaleway_endpoint }}"
+REGION = "{{ scaleway_region }}"
+PREFIX = "library/"
+LOG = "/var/log/backup-object-lock-renew.log"
+KUMA_URL = "{{ uptime_kuma_push_base }}/{{ vault_kuma_push_object_lock_renew }}"
+ADMIN = "{{ backup_admin_email }}"
+FROM = "{{ smtp_from_backup | default('backup@flefevre.fr') }}"
+RETAIN_DAYS = {{ object_lock_days }}
+WORKERS = 16  # put-object-retention is network-latency-bound: overlap, don't burn CPU.
+
+# cron has no HOME; make the Scaleway creds resolvable without relying on ~ expansion.
+os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", "/root/.aws/credentials")
+
+HOST = socket.gethostname()
+
+
+def kuma(status, msg, retry=False):
+    args = ["curl", "-fsS", "-m", "15"]
+    if retry:
+        args += ["--retry", "3"]
+    args += ["-G", KUMA_URL,
+             "--data-urlencode", f"status={status}",
+             "--data-urlencode", f"msg={msg}"]
+    # Best-effort (like the former shell version): a missing curl or bad PATH
+    # raises OSError before the process runs — swallow it, never crash alerting.
+    try:
+        subprocess.run(args, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=False)
+    except OSError as exc:
+        print(f"  WARN: Kuma ping could not spawn curl ({exc})")
+
+
+def mail(subject, body):
+    try:
+        subprocess.run(["mail", "-r", FROM, "-s", subject, ADMIN],
+                       input=body.encode(), check=False)
+    except OSError as exc:
+        print(f"  WARN: alert mail could not spawn ({exc})")
+
+
+# Open the log only after kuma()/mail() exist: a failure here (disk full, bad
+# permissions) must still honor the Kuma/mail contract instead of dying silently
+# under cron's MAILTO="". Line-buffered so tail -f is live.
+try:
+    _log = open(LOG, "a", buffering=1)
+except OSError as exc:
+    mail("[backup] Object Lock renewal could not open its log",
+         f"Object Lock renewal on {HOST}: cannot open {LOG} ({exc}). Aborted.\n")
+    kuma("down", "cannot open log")
+    sys.exit(1)
+sys.stdout = sys.stderr = _log
+
+
+now = datetime.datetime.now(datetime.timezone.utc)
+retain_until = now + datetime.timedelta(days=RETAIN_DAYS)
+print(f"===== {now.isoformat(timespec='seconds')} Object Lock renewal ({PREFIX}) =====")
+print(f"Extending retain-until-date to {retain_until.isoformat(timespec='seconds')}")
+
+cfg = Config(retries={"max_attempts": 5, "mode": "standard"},
+             max_pool_connections=WORKERS)
+s3 = boto3.client("s3", endpoint_url=ENDPOINT, region_name=REGION, config=cfg)
+
+# Capture the key list first so a failed listing (auth/network) aborts LOUDLY
+# instead of feeding an empty stream to the pool and pinging success.
+try:
+    keys = []
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix=PREFIX):
+        keys += [obj["Key"] for obj in page.get("Contents", [])]
+except (BotoCoreError, ClientError) as exc:
+    print(f"  FAIL: list-objects-v2 ({exc}) — aborting without pinging up")
+    mail("[backup] Object Lock renewal could not list objects",
+         f"Object Lock renewal on {HOST}: list-objects-v2 FAILED. See {LOG}\n")
+    kuma("down", "list-objects failed")
+    sys.exit(1)
+
+
+def renew(key):
+    try:
+        s3.put_object_retention(
+            Bucket=BUCKET, Key=key,
+            Retention={"Mode": "COMPLIANCE", "RetainUntilDate": retain_until},
+        )
+        return key, None
+    except (BotoCoreError, ClientError) as exc:
+        return key, str(exc)
+
+
+total = len(keys)
+failed = 0
+with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+    for key, err in pool.map(renew, keys):
+        if err:
+            failed += 1
+            print(f"  FAIL: {key} ({err})")
+
+print(f"Done — {total} objects, {failed} failures")
+
+if failed == 0:
+    kuma("up", f"{total} objects renewed", retry=True)
+else:
+    mail("[backup] Object Lock renewal had failures",
+         f"Object Lock renewal on {HOST}: {failed}/{total} objects FAILED to renew. See {LOG}\n")
+    kuma("down", f"{failed}/{total} renewals failed")
+    sys.exit(1)

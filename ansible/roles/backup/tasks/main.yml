@@ -6,14 +6,14 @@
 # (the real attack surface) reaches neither (Scénario 6 isolation).
 
 # Step 1 — packages
-# awscli: needed for `aws s3api put-object-retention` (weekly renewal) — rclone
-# cannot extend Object Lock retention on existing objects. rclone: the copy
-# engine. msmtp/mailutils: abort/alert mail, same pattern as neon/bromine.
+# python3-boto3: drives the weekly Object Lock renewal (put-object-retention) —
+# rclone cannot extend retention on existing objects. rclone: the copy engine.
+# msmtp/mailutils: abort/alert mail, same pattern as neon/bromine.
 - name: Install packages
   apt:
     name:
       - rclone
-      - awscli
+      - python3-boto3
       - cron
       - curl
       - logrotate
@@ -90,7 +90,7 @@
     mode: "0600"
   no_log: true   # renders the Scaleway secret key
 
-# awscli reads the same Scaleway key for the Object Lock renewal job.
+# boto3 reads the same Scaleway key for the Object Lock renewal job.
 - name: Create aws credentials directory
   file:
     path: /root/.aws
@@ -118,7 +118,7 @@
     mode: "0755"
   loop:
     - backup-rclone-scaleway.sh
-    - backup-object-lock-renew.sh
+    - backup-object-lock-renew.py
     - backup-rclone-hdd.sh
   no_log: true   # scripts embed vault values (Healthchecks UUIDs) — no --diff leak
 

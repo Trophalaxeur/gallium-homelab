@@ -141,9 +141,9 @@ Managed by the `backup` Ansible role (`ansible/roles/backup/`). Crons
 
 | Schedule | Script | What it does |
 |---|---|---|
-| `02:00` daily | `backup-rclone-scaleway.sh` | `rclone copy` photos → `library/` and DB dumps → `db-backups/`, both with Object Lock Compliance +90 d. **Gates on the DB dump being < 25 h old** before pinging success. |
+| `02:00` daily | `backup-rclone-scaleway.sh` | `rclone copy` originals → `library/` and DB dumps → `db-backups/`, both with Object Lock Compliance +90 d. `thumbs/` and `encoded-video/` are **excluded** — regenerable, and their in-place rewrites collide with Object Lock (Forbidden overwrites → locked version pile-up). **Gates on the DB dump being < 25 h old** before pinging success. |
 | `02:20` daily | `backup-rclone-hdd.sh` | `rclone copy` photos → HDD, with `--backup-dir /mnt/hdd/.versions/<date>` so an in-place overwrite keeps the old version. **`mountpoint`-guarded** (Scénario 8). |
-| `03:00` Sunday | `backup-object-lock-renew.sh` | Walks still-present `library/` objects and pushes their `retain-until-date` to now +90 d (sliding retention). `db-backups/` is deliberately **not** renewed — those age out via the bucket lifecycle. |
+| `03:00` Sunday | `backup-object-lock-renew.py` | Walks still-present `library/` objects and pushes their `retain-until-date` to now +90 d (sliding retention). `db-backups/` is deliberately **not** renewed — those age out via the bucket lifecycle. |
 
 Key design points:
 

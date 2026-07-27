@@ -72,7 +72,7 @@ heartbeat window; a late ping flips the monitor to **DOWN**:
 |---|---|---|---|
 | `rclone-scaleway` | `backup-rclone-scaleway.sh` | ~1 day | 02:00 daily |
 | `rclone-hdd` | `backup-rclone-hdd.sh` | ~1 day | 02:20 daily |
-| `object-lock-renew` | `backup-object-lock-renew.sh` | ~8 days | 03:00 Sunday |
+| `object-lock-renew` | `backup-object-lock-renew.py` | ~8 days | 03:00 Sunday |
 
 Each job pushes `?status=up` on success and an explicit `?status=down` on
 failure (immediate alert, on top of the late-heartbeat safety net). The push

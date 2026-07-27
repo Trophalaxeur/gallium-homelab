@@ -3,7 +3,7 @@
 # Storage. The bucket has a DEFAULT Object Lock retention (Compliance, 90 days)
 # set at creation (scripts/scaleway-bucket-bootstrap.sh), so every freshly PUT
 # object is locked automatically — no per-object flag needed here. Weekly
-# renewal (backup-object-lock-renew.sh) keeps still-present photos locked past
+# renewal (backup-object-lock-renew.py) keeps still-present photos locked past
 # their original 90 days (Rétention glissante).
 #
 # rclone COPY (never sync/delete): a deletion in Immich must not propagate to
@@ -20,10 +20,18 @@ FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
 exec >>"$LOG" 2>&1
 echo "===== $(date -Is) rclone → Scaleway ====="
 
-# Library/originals (everything except the DB dumps, which go to their own
-# prefix with a 90-day lifecycle expiry).
+# Originals only. DB dumps go to their own prefix (below) with a 90-day
+# lifecycle expiry. Thumbs and encoded-video are DELIBERATELY excluded: both are
+# regenerable from the originals, and Immich rewrites them in place (thumbnail
+# regen, re-transcode) reusing the same S3 key. Under the bucket's default
+# Object Lock (Compliance, 90d) those overwrites are Forbidden — so each regen
+# would pile up locked, undeletable versions AND trigger a 403 storm (46k errors
+# on the 2026-07-11 run, after a mobile import re-dated ~31k thumbs). Keep the
+# immutable tier to what genuinely cannot be rebuilt.
 rclone copy "$SRC" "${REMOTE}/library" \
   --exclude '/backups/**' \
+  --exclude '/thumbs/**' \
+  --exclude '/encoded-video/**' \
   --transfers 4 --checkers 8 --stats-one-line --stats 1m
 rc_lib=$?
 
