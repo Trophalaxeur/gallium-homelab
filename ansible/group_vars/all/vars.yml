@@ -7,6 +7,7 @@ neon_ip: "192.168.1.60"
 bromine_ip: "192.168.1.61"
 pbs_ip: "192.168.1.62"
 immich_ip: "192.168.1.63"
+printer_ip: "192.168.1.29"       # Brother printer, DHCP-reserved on Livebox (MAC 48:45:E6:53:DE:D9)
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"

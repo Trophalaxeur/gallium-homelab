@@ -121,6 +121,12 @@ filtering:
     - domain: uptime.flefevre.fr
       answer: "{{ uptime_ip }}"
       enabled: true
+    - domain: printer.lan
+      answer: "{{ printer_ip }}"
+      enabled: true
+    - domain: printer.flefevre.fr
+      answer: "{{ printer_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris
