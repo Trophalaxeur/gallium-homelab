@@ -72,6 +72,10 @@ rclone_remote: "scaleway"
 # Object Lock Compliance window (days) re-applied on every upload and renewed
 # weekly on still-present library/ objects (Rétention glissante).
 object_lock_days: 90
+# Thread pool size of the weekly renewal job. The calls are network-bound (one
+# tiny PUT per object), so this can exceed the LXC's single core — it is capped
+# by Scaleway's tolerance and by RAM (512 MB), not by CPU.
+object_lock_renew_workers: 16
 
 # Deadman switches → self-hosted Uptime Kuma (LXC 106). Each backup job pushes
 # to {{ uptime_kuma_push_base }}/{{ vault_kuma_push_* }} (?status=up on success,

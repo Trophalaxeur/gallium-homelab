@@ -6,14 +6,17 @@
 # (the real attack surface) reaches neither (Scénario 6 isolation).
 
 # Step 1 — packages
-# awscli: needed for `aws s3api put-object-retention` (weekly renewal) — rclone
-# cannot extend Object Lock retention on existing objects. rclone: the copy
-# engine. msmtp/mailutils: abort/alert mail, same pattern as neon/bromine.
+# python3-boto3: drives the weekly Object Lock renewal — rclone cannot extend
+# Object Lock retention on existing objects. awscli is kept for manual ops on
+# the bucket only; the renewal job no longer shells out to it (see Step 5).
+# rclone: the copy engine. msmtp/mailutils: abort/alert mail, same pattern as
+# neon/bromine.
 - name: Install packages
   apt:
     name:
       - rclone
       - awscli
+      - python3-boto3
       - cron
       - curl
       - logrotate
@@ -108,7 +111,9 @@
     mode: "0600"
   no_log: true
 
-# Step 5 — the three job scripts
+# Step 5 — the three job scripts. The renewal one is Python (boto3): forking an
+# `aws` process per object made it interpreter-startup-bound (~8h30 for 77k
+# objects); one process with a thread pool pays the import once.
 - name: Deploy backup job scripts
   template:
     src: "{{ item }}.j2"
@@ -118,9 +123,14 @@
     mode: "0755"
   loop:
     - backup-rclone-scaleway.sh
-    - backup-object-lock-renew.sh
+    - backup-object-lock-renew.py
     - backup-rclone-hdd.sh
   no_log: true   # scripts embed vault values (Healthchecks UUIDs) — no --diff leak
+
+- name: Remove the superseded shell version of the renewal job
+  file:
+    path: /usr/local/bin/backup-object-lock-renew.sh
+    state: absent
 
 # Step 6 — crons: Scaleway 02:00, HDD 02:20 (after the DB dump lands), Object
 # Lock renewal Sunday 03:00. Timings chosen so the nightly chain doesn't overlap.

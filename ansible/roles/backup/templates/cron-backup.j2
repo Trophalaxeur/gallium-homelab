@@ -9,4 +9,4 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Étape 4b — photos → external HDD (nightly, 20 min later to avoid I/O overlap)
 20 2 * * *  root /usr/local/bin/backup-rclone-hdd.sh
 # Étape 4a-bis — weekly Object Lock renewal on still-present library/ objects
-0 3 * * 0   root /usr/local/bin/backup-object-lock-renew.sh
+0 3 * * 0   root /usr/local/bin/backup-object-lock-renew.py

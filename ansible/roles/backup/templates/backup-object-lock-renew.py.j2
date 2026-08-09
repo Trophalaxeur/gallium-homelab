@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+# Étape 4a-bis — weekly Object Lock renewal (Rétention glissante). Object Lock
+# Compliance makes objects immutable for a FIXED window ({{ object_lock_days }} days here). Without
+# renewal, a photo taken today becomes deletable in {{ object_lock_days }} days. This job walks the
+# library/ objects still present and pushes their retain-until-date to now+{{ object_lock_days }}d,
+# so anything still in the active library stays immutable indefinitely — the
+# real ransomware protection (Scénario 6). Compliance mode only allows EXTENDING
+# a retention date, never shortening: safe to re-run.
+#
+# db-backups/ is intentionally NOT renewed — those dumps are meant to age out at
+# {{ object_lock_days }} days (bucket lifecycle rule).
+#
+# Why Python and not `aws s3api` in a shell loop: the previous version forked one
+# `aws` process per object. The CLI is Python, and importing botocore costs ~0.5 s,
+# so the run was bounded by interpreter startup, not by S3 — 77 824 objects took
+# ~8h30 at 2.5 obj/s with the LXC's single core pinned at 100 %. One process with a
+# thread pool pays that import once and lets the calls overlap on the network.
+
+import os
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
+
+BUCKET = "{{ scaleway_bucket }}"
+ENDPOINT = "{{ scaleway_endpoint }}"
+REGION = "{{ scaleway_region }}"
+PREFIX = "library/"
+LOG = "/var/log/backup-object-lock-renew.log"
+KUMA_URL = "{{ uptime_kuma_push_base }}/{{ vault_kuma_push_object_lock_renew }}"
+ADMIN = "{{ backup_admin_email }}"
+FROM = "{{ smtp_from_backup | default('backup@flefevre.fr') }}"
+WORKERS = {{ object_lock_renew_workers }}
+# Cap on individual failures written to the log: a systemic failure (expired key,
+# bucket policy change) fails on every object, and 77k FAIL lines would blow past
+# logrotate and bury the summary. The reported count stays exact.
+MAX_LOGGED_FAILURES = 20
+
+# Mirror the old script's `exec >>"$LOG" 2>&1` — everything, including an
+# unhandled traceback, lands in the log rather than in cron's mail.
+_log = open(LOG, "a", buffering=1)
+os.dup2(_log.fileno(), sys.stdout.fileno())
+os.dup2(_log.fileno(), sys.stderr.fileno())
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def kuma(status, msg, retry=1):
+    query = urllib.parse.urlencode({"status": status, "msg": msg})
+    for attempt in range(retry):
+        try:
+            urllib.request.urlopen(f"{KUMA_URL}?{query}", timeout=15).close()
+            return
+        except Exception as exc:  # deadman ping is best-effort, never fatal
+            if attempt == retry - 1:
+                log(f"  WARN: Kuma push failed ({exc})")
+
+
+def mail(subject, body):
+    try:
+        subprocess.run(
+            ["mail", "-r", FROM, "-s", subject, ADMIN],
+            input=body.encode(), timeout=60, check=False,
+        )
+    except Exception as exc:
+        log(f"  WARN: mail failed ({exc})")
+
+
+log(f"===== {datetime.now().astimezone().isoformat(timespec='seconds')} "
+    f"Object Lock renewal ({PREFIX}) =====")
+
+retain_until = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(
+    days={{ object_lock_days }}
+)
+log(f"Extending retain-until-date to {retain_until.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+
+# max_pool_connections must cover the thread pool or the workers serialise on the
+# connection pool. standard retry mode absorbs the transient 5xx that are a
+# statistical certainty over tens of thousands of requests.
+s3 = boto3.client(
+    "s3",
+    endpoint_url=ENDPOINT,
+    region_name=REGION,
+    config=Config(
+        max_pool_connections=WORKERS,
+        retries={"max_attempts": 5, "mode": "standard"},
+    ),
+)
+
+# Collect the key list first so a failed listing (auth/network) aborts LOUDLY
+# instead of feeding an empty stream to the pool and pinging success.
+try:
+    keys = [
+        obj["Key"]
+        for page in s3.get_paginator("list_objects_v2").paginate(
+            Bucket=BUCKET, Prefix=PREFIX
+        )
+        for obj in page.get("Contents", [])
+    ]
+except (ClientError, BotoCoreError) as exc:
+    log(f"  FAIL: list_objects_v2 (auth/network?) — aborting without pinging up: {exc}")
+    mail("[backup] Object Lock renewal could not list objects",
+         f"Object Lock renewal on {os.uname().nodename}: list_objects_v2 FAILED. See {LOG}\n")
+    kuma("down", "list-objects failed")
+    sys.exit(1)
+
+total = len(keys)
+log(f"{total} objects to renew, {WORKERS} workers")
+
+failures = []
+
+
+def renew(key):
+    try:
+        s3.put_object_retention(
+            Bucket=BUCKET,
+            Key=key,
+            Retention={"Mode": "COMPLIANCE", "RetainUntilDate": retain_until},
+        )
+        return None
+    except (ClientError, BotoCoreError) as exc:
+        return f"{key}: {exc}"
+
+
+started = datetime.now(timezone.utc)
+with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+    for done, error in enumerate(pool.map(renew, keys), start=1):
+        if error is not None:
+            failures.append(error)
+            if len(failures) <= MAX_LOGGED_FAILURES:
+                log(f"  FAIL: {error}")
+            elif len(failures) == MAX_LOGGED_FAILURES + 1:
+                log("  (further failures not logged individually)")
+        # Progress breadcrumbs: the previous version logged nothing before the
+        # final line, so a slow run could only be diagnosed by reading `ps`.
+        if done % 10000 == 0:
+            rate = done / max((datetime.now(timezone.utc) - started).total_seconds(), 1e-9)
+            log(f"  {done}/{total} ({rate:.0f} obj/s)")
+
+elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+failed = len(failures)
+log(f"Done — {total} objects, {failed} failures, {elapsed:.0f}s "
+    f"({total / max(elapsed, 1e-9):.0f} obj/s)")
+
+if failed == 0:
+    kuma("up", f"{total} objects renewed", retry=3)
+else:
+    mail("[backup] Object Lock renewal had failures",
+         f"Object Lock renewal on {os.uname().nodename}: {failed}/{total} objects "
+         f"FAILED to renew. See {LOG}\n")
+    kuma("down", f"{failed}/{total} renewals failed")
+    sys.exit(1)
