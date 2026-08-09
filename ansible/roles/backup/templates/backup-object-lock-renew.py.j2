@@ -21,6 +21,7 @@ import os
 import socket
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import boto3
@@ -37,6 +38,13 @@ ADMIN = "{{ backup_admin_email }}"
 FROM = "{{ smtp_from_backup | default('backup@flefevre.fr') }}"
 RETAIN_DAYS = {{ object_lock_days }}
 WORKERS = 16  # put-object-retention is network-latency-bound: overlap, don't burn CPU.
+# Cap on individual FAIL lines. A systemic failure (expired key, bucket policy
+# change) fails on EVERY object: tens of thousands of lines would bury the
+# summary and outrun logrotate. The reported count stays exact.
+MAX_LOGGED_FAILURES = 20
+# Objects between progress lines. The run used to log nothing between the header
+# and the final line, so diagnosing a slow one meant reading `ps` on the LXC.
+PROGRESS_EVERY = 10000
 
 # cron has no HOME; make the Scaleway creds resolvable without relying on ~ expansion.
 os.environ.setdefault("AWS_SHARED_CREDENTIALS_FILE", "/root/.aws/credentials")
@@ -116,14 +124,25 @@ def renew(key):
 
 
 total = len(keys)
+print(f"{total} objects to renew, {WORKERS} workers")
+
+started = time.monotonic()
 failed = 0
 with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-    for key, err in pool.map(renew, keys):
+    for done, (key, err) in enumerate(pool.map(renew, keys), start=1):
         if err:
             failed += 1
-            print(f"  FAIL: {key} ({err})")
+            if failed <= MAX_LOGGED_FAILURES:
+                print(f"  FAIL: {key} ({err})")
+            elif failed == MAX_LOGGED_FAILURES + 1:
+                print("  ... further failures counted but not logged individually")
+        if done % PROGRESS_EVERY == 0:
+            rate = done / max(time.monotonic() - started, 1e-9)
+            print(f"  {done}/{total} ({rate:.0f} obj/s)")
 
-print(f"Done — {total} objects, {failed} failures")
+elapsed = time.monotonic() - started
+print(f"Done — {total} objects, {failed} failures, {elapsed:.0f}s "
+      f"({total / max(elapsed, 1e-9):.0f} obj/s)")
 
 if failed == 0:
     kuma("up", f"{total} objects renewed", retry=True)

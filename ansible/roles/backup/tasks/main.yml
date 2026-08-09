@@ -115,12 +115,22 @@
     dest: "/usr/local/bin/{{ item }}"
     owner: root
     group: root
-    mode: "0755"
+    # 0700, not 0755: these embed the vault-derived Kuma push tokens and every
+    # cron entry runs as root, so nothing else needs to read them.
+    mode: "0700"
   loop:
     - backup-rclone-scaleway.sh
     - backup-object-lock-renew.py
     - backup-rclone-hdd.sh
   no_log: true   # scripts embed vault values (Healthchecks UUIDs) — no --diff leak
+
+# The .py superseded the shell version in PR #20; the old file is still on disk
+# on LXCs provisioned before that. Cron already points at the .py — this only
+# clears the stale copy (which still holds a readable push token).
+- name: Remove the superseded shell version of the renewal job
+  file:
+    path: /usr/local/bin/backup-object-lock-renew.sh
+    state: absent
 
 # Step 6 — crons: Scaleway 02:00, HDD 02:20 (after the DB dump lands), Object
 # Lock renewal Sunday 03:00. Timings chosen so the nightly chain doesn't overlap.
