@@ -8,7 +8,7 @@
 # Step 1 — packages
 # python3-boto3: drives the weekly Object Lock renewal (put-object-retention) —
 # rclone cannot extend retention on existing objects. rclone: the copy engine.
-# msmtp/mailutils: abort/alert mail, same pattern as neon/bromine.
+# msmtp/mailutils: abort/alert mail, same pattern as neon.
 - name: Install packages
   apt:
     name:
@@ -22,7 +22,7 @@
     state: present
     update_cache: true
 
-# Step 2 — msmtp (mail on abort; shared vault_smtp_password like neon/bromine)
+# Step 2 — msmtp (mail on abort; shared vault_smtp_password like neon)
 - name: Deploy msmtp config
   template:
     src: msmtprc.j2

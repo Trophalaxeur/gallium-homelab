@@ -32,9 +32,8 @@ classic **3-2-1**, plus local ZFS snapshots and PBS on top.
 │ NVMe 931 GB (rpool) — gallium                               │
 │  LXC adguard ─┐                                             │
 │  LXC neon ────┤                                             │
-│  LXC bromine ─┼──→ [PBS LXC 103] ──→ [PBS datastore]        │
-│  LXC immich ──┤      incremental, dedup, verify             │
-│  LXC backup ──┤                                             │
+│  LXC immich ──┼──→ [PBS LXC 103] ──→ [PBS datastore]        │
+│  LXC backup ──┤      incremental, dedup, verify             │
 │  LXC uptime ──┘                                             │
 │                                                             │
 │  rpool/data/immich-photos ──┬─ ZFS snapshots (sanoid)       │
@@ -78,7 +77,7 @@ physical HDD — two independent failures.
 |---|---|:--:|:--:|:--:|:--:|
 | **Immich photos/videos** (`library/`) | **DATA** | ✗¹ | ✓ | ✓ | ✓ |
 | **Immich PostgreSQL** (logical dump) | **DATA** | ✓² | ✓ | ✓ | ✓ |
-| adguard / neon / bromine / uptime OS + config | INFRA | ✓ | ✓ | ✗ | ✗ |
+| adguard / neon / uptime OS + config | INFRA | ✓ | ✓ | ✗ | ✗ |
 | immich LXC OS (rootfs, incl. live Postgres) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | backup LXC OS (rclone/aws creds, crons) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | Config host PVE (bridge, storage, ACL) | INFRA | ✗ | ✗ | ✗ | ✗³ |
@@ -254,9 +253,6 @@ re-enter each value:
 | `vault_claude_oauth_token` | `claude setup-token` on a logged-in machine. |
 | `vault_gh_admin_token` | GitHub PAT (classic, `repo`) — deploy-key registration only. |
 | `vault_multica_pat` | multica.ai → Settings → API tokens. |
-| `vault_anthropic_api_token` | Anthropic console (bromine backend). |
-| `vault_google_client_id` / `vault_google_client_secret` | Google Cloud console (bromine OAuth). |
-| `vault_bromine_allowed_emails` | Known list — re-enter. |
 | `vault_immich_db_password` | Choose a new one **before first Immich start**; the DB is initialized with it. On restore into an existing dump, it must match the dump's role password. |
 | `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` | Scaleway console → IAM → regenerate a **scoped** key on `homelab-photos-backup` (Put/Get/List/PutObjectRetention; deny Delete*/PutBucketVersioning). Distinct from `online_api_key` — different provider account. Kept in **LastPass** ("Scaleway Gallium backup API key"). |
 | `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` | Create three Push monitors in the Kuma UI, copy each token into the vault. |
@@ -264,7 +260,7 @@ re-enter each value:
 | Scaleway bootstrap creds (`scripts/.scaleway-credentials.env`) | Bootstrap-only (bucket already exists, Object Lock irreversible) — regenerate only to re-run the bootstrap script. |
 | ansible-vault password / `.vault_pass` | New vault password of your choosing (re-encrypts the recreated `vault.yml`). |
 | SSH keypair | `~/.ssh/id_ed25519.pub` re-authorized via `terraform.tfvars` + `vars.yml`. |
-| adguard→{bromine,immich,uptime} cert deploy keys | **Not vault secrets** — regenerated on adguard at deploy time. Re-run `--limit adguard,<host>` once after an adguard rebuild. |
+| adguard→{immich,uptime} cert deploy keys | **Not vault secrets** — regenerated on adguard at deploy time. Re-run `--limit adguard,<host>` once after an adguard rebuild. |
 
 **Two Immich admin accounts must both be recreated** on a full rebuild:
 `admin@flefevre.fr` (service/bootstrap) and the daily-use account (admin rights,

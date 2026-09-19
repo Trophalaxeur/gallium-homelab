@@ -1,5 +1,5 @@
 resource "proxmox_virtual_environment_container" "pbs" {
-  description  = "PBS — Proxmox Backup Server (adguard/neon/bromine, incremental)"
+  description  = "PBS — Proxmox Backup Server (adguard/neon/immich/backup/uptime, incremental)"
   node_name    = var.proxmox_node
   vm_id        = var.pbs_vmid
   started      = true

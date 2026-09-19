@@ -1,6 +1,6 @@
 # Managed by Ansible (immich role) — do not edit on the host.
 #
-# Same pattern as bromine: cert issued on the AdGuard LXC (acme.sh, DNS-01)
+# Same pattern as uptime-kuma: cert issued on the AdGuard LXC (acme.sh, DNS-01)
 # and pushed here over SSH (immich-cert role) — Caddy only terminates TLS on
 # :443 and proxies to the Immich server container, bound to loopback:2283.
 {{ immich_domain }} {

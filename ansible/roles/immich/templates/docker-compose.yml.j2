@@ -15,7 +15,7 @@ services:
       - .env
     ports:
       # Loopback only — Caddy (this LXC) terminates TLS and proxies here,
-      # same pattern as bromine (see Caddyfile.j2 + immich-cert role).
+      # see Caddyfile.j2 + immich-cert role.
       - 127.0.0.1:2283:2283
     depends_on:
       - redis
