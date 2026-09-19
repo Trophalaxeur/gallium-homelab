@@ -192,6 +192,7 @@
   vars:
     pbs_storage_name: "pbs"
     pbs_backup_job_id: "pbs-daily-lxc-sys"
+    pbs_backup_comment: "PBS daily backup - adguard/neon/immich/backup/uptime (ansible-managed)"
     pbs_backup_vmids: "100,101,104,105,106"   # adguard, neon, immich, backup, uptime (rootfs only — photos/HDD bind-mounts excluded, cf. Étape 3/3-bis)
 
   pre_tasks:
@@ -242,20 +243,24 @@
         --mode snapshot
         --prune-backups "keep-daily=30"
         --node {{ proxmox_node }}
-        --comment "PBS daily backup - adguard/neon/immich/backup/uptime (ansible-managed)"
+        --comment "{{ pbs_backup_comment }}"
       when: pbs_backup_job_id not in (pbs_backup_jobs.stdout | from_json | map(attribute='id') | list)
 
     # `pvesh create` above only runs once (job absent). When the job already
-    # exists but pbs_backup_vmids has grown (e.g. immich added after the
-    # initial run), the create task is skipped and the job would silently keep
-    # backing up only the old vmid list — so reconcile it explicitly here.
-    - name: Keep the PBS backup job's vmid list in sync
+    # exists but the vmid list or the comment changed (a host added, or
+    # bromine decommissioned), the create task is skipped and the job would
+    # silently keep the stale values — so reconcile them explicitly here.
+    - name: Keep the PBS backup job's vmid list and comment in sync
       ansible.builtin.command: >
         pvesh set /cluster/backup/{{ pbs_backup_job_id }}
         --vmid "{{ pbs_backup_vmids }}"
+        --comment "{{ pbs_backup_comment }}"
+      vars:
+        pbs_existing_job: "{{ pbs_backup_jobs.stdout | from_json | selectattr('id', 'equalto', pbs_backup_job_id) | first | default({}) }}"
       when:
         - pbs_backup_job_id in (pbs_backup_jobs.stdout | from_json | map(attribute='id') | list)
-        - (pbs_backup_jobs.stdout | from_json | selectattr('id', 'equalto', pbs_backup_job_id) | map(attribute='vmid') | first) != pbs_backup_vmids
+        - pbs_existing_job.vmid | default('') != pbs_backup_vmids or
+          pbs_existing_job.comment | default('') != pbs_backup_comment
 
 # Standalone ZFS dataset for Immich photos+DB dumps (backup=no equivalent: not
 # a container rootfs, excluded from PBS by nature, protected instead by sanoid
