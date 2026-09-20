@@ -73,10 +73,10 @@
     'Started' in immich_compose_up.stderr or 'Created' in immich_compose_up.stderr
     or 'Recreate' in immich_compose_up.stderr
 
-# --- TLS reverse proxy (Caddy) — same pattern as bromine (bromine-agent role) ---
+# --- TLS reverse proxy (Caddy) — the homelab's reference TLS pattern ---
 # The cert itself is issued on the AdGuard LXC (acme.sh, DNS-01) and pushed to
-# /etc/caddy/cert over SSH by the `immich-cert` role. See docs/bromine.md for
-# the mechanism this mirrors.
+# /etc/caddy/cert over SSH by the `immich-cert` role. See docs/immich.md
+# ("How TLS is wired") for the full mechanism — uptime-kuma mirrors it.
 
 - name: Create /etc/apt/keyrings
   ansible.builtin.file:
@@ -126,7 +126,7 @@
     group: caddy
     mode: "0750"
 
-# Unlike bromine's LXC, this Debian template doesn't have sudo preinstalled —
+# This Debian template doesn't have sudo preinstalled —
 # no /etc/sudoers.d without it, which the sudoers.d/certdeploy task below needs.
 - name: Install sudo
   ansible.builtin.apt:

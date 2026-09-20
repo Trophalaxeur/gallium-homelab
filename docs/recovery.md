@@ -29,9 +29,6 @@ This document lists every secret used in this project, where it lives, and how t
 | `vault_claude_oauth_token` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_gh_admin_token` (PAT, deploy key registration only) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_multica_pat` (Multica cloud API token — Phase 2) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
-| `vault_anthropic_api_token` (bromine backend) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
-| `vault_google_client_id` / `vault_google_client_secret` (bromine OAuth) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
-| `vault_bromine_allowed_emails` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_immich_db_password` | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` (scoped IAM key) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
 | `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` (deadman tokens) | `ansible/group_vars/all/vault.yml` | No (gitignored) |
@@ -86,12 +83,12 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook.yml --ask-vault-pass
 
 Generate a new API key in the Online.net console (Account → API keys) and update `vault.yml` via `ansible-vault edit`. acme.sh will pick it up on the next renewal cron run.
 
-### adguard→bromine cert deploy key lost / rotate
+### adguard→`<host>` cert deploy key lost / rotate
 
-Not a vault secret. The ed25519 key acme.sh (on adguard) uses to push bromine's TLS cert over SSH is generated on adguard at deploy time (`playbook.yml` adguard play) and lives only at `/root/.ssh/bromine-cert-deploy` there. To rotate:
+Not a vault secret. The ed25519 keys acme.sh (on adguard) uses to push each TLS cert over SSH are generated on adguard at deploy time (`playbook.yml` adguard play) and live only at `/root/.ssh/<host>-cert-deploy` there — one pair per target (`immich`, `uptime`). To rotate:
 
-1. On **adguard**: `rm /root/.ssh/bromine-cert-deploy{,.pub}`.
-2. `ansible-playbook playbook.yml --limit adguard,bromine` — adguard regenerates the pair, bromine re-authorizes the new public half for `certdeploy` (`exclusive: true` drops the old one).
+1. On **adguard**: `rm /root/.ssh/<host>-cert-deploy{,.pub}`.
+2. `ansible-playbook playbook.yml --limit adguard,<host>` — adguard regenerates the pair, the target re-authorizes the new public half for `certdeploy` (`exclusive: true` drops the old one).
 
 ### Neon vault secrets lost
 
@@ -102,7 +99,7 @@ Not a vault secret. The ed25519 key acme.sh (on adguard) uses to push bromine's 
 | `vault_gh_admin_token` | GitHub → Settings → Developer settings → PAT (classic) → scope `repo`. Used once for deploy key registration; can be deleted after Phase 1. |
 | `vault_multica_pat` | Generate a new API token on multica.ai (Settings → API tokens). Update vault, then `ansible-playbook --tags phase2`. |
 
-### Bromine / Immich / backup secrets lost
+### Immich / backup secrets lost
 
 These are all re-issuable from their source — see the
 [backup.md recreation checklist](backup.md#secret-recreation-checklist-scénario-7--the-critical-artifact)
@@ -110,8 +107,6 @@ for the full list and where to regenerate each. Highlights:
 
 | Secret | How to regenerate |
 |---|---|
-| `vault_anthropic_api_token` | Anthropic console → API keys. |
-| `vault_google_client_id` / `vault_google_client_secret` | Google Cloud console → OAuth credentials. |
 | `vault_immich_db_password` | New value **before first Immich start**; on restore it must match the dump's role password. |
 | `vault_rclone_scaleway_access_key` / `vault_rclone_scaleway_secret_key` | Scaleway → IAM → regenerate a **scoped** key on `homelab-photos-backup` (kept in LastPass "Scaleway Gallium backup API key"). Distinct provider account from `online_api_key`. |
 | `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` | Recreate the three Push monitors in the Uptime Kuma UI, copy each token back into the vault. |

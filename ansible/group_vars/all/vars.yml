@@ -4,7 +4,6 @@ proxmox_ip: "192.168.1.32"
 adguard_ip: "192.168.1.53"
 thallium_ip: "192.168.1.20"
 neon_ip: "192.168.1.60"
-bromine_ip: "192.168.1.61"
 pbs_ip: "192.168.1.62"
 immich_ip: "192.168.1.63"
 printer_ip: "192.168.1.29"       # Brother printer, DHCP-reserved on Livebox (MAC 48:45:E6:53:DE:D9)
@@ -21,15 +20,6 @@ neon_admin_email: "admin@flefevre.fr"
 # Admin SSH public key — used by Ansible to authorize neonuser (Terraform handles root)
 ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+tX7HsjNAPltIWdXTp flefevre@thallium"
 
-# --- bromine ---
-bromine_admin_email: "admin@flefevre.fr"
-smtp_from_bromine: "bromine@flefevre.fr"
-bromine_domain: "bromine.flefevre.fr"
-# The acme.sh ssh deploy-hook key (adguard → bromine, certdeploy user) is
-# generated on adguard at deploy time (playbook.yml adguard play) — no static
-# pubkey or vault secret. The bromine play reads the public half from adguard's
-# facts. See docs/bromine.md ("How TLS is wired").
-
 # --- immich ---
 # ZFS dataset for photos + Immich's own DB dumps (backup=no equivalent — not a
 # container rootfs, excluded from PBS by nature). Shared by the "Provision ZFS
@@ -39,7 +29,7 @@ immich_photos_dataset: "rpool/data/immich-photos"
 immich_admin_email: "admin@flefevre.fr"
 # Public-facing name (registered at Online.net → 90.76.179.86, port-forwarded
 # on the Livebox). immich.lan stays the internal/technical AdGuard name
-# (matches the LXC hostname, like adguard.lan/bromine.lan/pbs.lan) — only the
+# (matches the LXC hostname, like adguard.lan/neon.lan/pbs.lan) — only the
 # public domain changed, decision 2026-07-07.
 immich_domain: "photos.flefevre.fr"
 immich_version: "v3.0.1"
@@ -84,7 +74,7 @@ uptime_kuma_push_base: "http://{{ uptime_ip }}:3001/api/push"
 # --- uptime (Uptime Kuma) ---
 uptime_ip: "192.168.1.65"
 # Public-facing TLS name (real Let's Encrypt cert, same acme-on-adguard pattern
-# as immich/bromine). Resolves internally (AdGuard rewrite → .65), never
+# as immich). Resolves internally (AdGuard rewrite → .65), never
 # port-forwarded — HTTPS is for the human dashboard only; the backup jobs still
 # push over http://uptime.lan:3001 (unchanged).
 uptime_domain: "uptime.flefevre.fr"

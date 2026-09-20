@@ -80,7 +80,9 @@ services, this one is reachable from the internet:
 
 ### How TLS is wired
 
-Identical mechanism to [bromine](bromine.md) and [uptime-kuma](uptime-kuma.md):
+The homelab's reference TLS pattern, also used by
+[uptime-kuma](uptime-kuma.md) (and, until its decommissioning, by
+[bromine](bromine.md)):
 
 - **Caddy** on this LXC terminates TLS on `:443` and reverse-proxies to the
   Immich server container, published on `127.0.0.1:2283` (loopback only, so
@@ -180,7 +182,7 @@ pitfalls — lives in
 
 Automatic (adguard's daily cron). To force a re-issue/re-push, run on **adguard**:
 `HOME=/root /root/.acme.sh/acme.sh --renew -d photos.flefevre.fr --ecc --force`.
-Same mechanics as [bromine's cert](bromine.md#tls-certificate-renewal).
+See [How TLS is wired](#how-tls-is-wired) for the mechanism.
 
 ### Restore
 

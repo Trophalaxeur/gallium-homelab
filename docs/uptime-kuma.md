@@ -54,8 +54,7 @@ Two entry points, on purpose:
 
 ### How TLS is wired
 
-Identical mechanism to [immich](immich.md#how-tls-is-wired) and
-[bromine](bromine.md): Caddy on this LXC terminates TLS on `:443`
+Identical mechanism to [immich](immich.md#how-tls-is-wired): Caddy on this LXC terminates TLS on `:443`
 and reverse-proxies to the Kuma container on `127.0.0.1:3001` (WebSocket/socket.io
 handled transparently). The cert is issued on the **AdGuard LXC** (acme.sh,
 DNS-01) and pushed here over SSH to a locked-down `certdeploy` user; the
@@ -103,7 +102,7 @@ Gmail — works even though Kuma is LAN-only).
 
 1. Generate a **dedicated Gmail App Password** (`me@flefevre.fr` → Google Account
    → Security → 2-Step Verification → App passwords). Same pattern as the neon /
-   bromine / Immich SMTP secrets — don't reuse another service's password.
+   Immich SMTP secrets — don't reuse another service's password.
 2. Kuma → **Settings → Notifications → Setup Notification**:
    - Type: **Email (SMTP)**
    - Hostname `smtp.gmail.com`, Port `587`, Security **STARTTLS** (or `465` /

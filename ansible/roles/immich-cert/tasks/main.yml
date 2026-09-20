@@ -2,7 +2,7 @@
 # Issues the Let's Encrypt cert for {{ immich_domain }} (photos.flefevre.fr —
 # the public-facing name, not the internal immich.lan) ON THE ADGUARD LXC and
 # pushes it to the immich LXC over SSH via acme.sh's ssh deploy-hook. Same
-# rationale as bromine-cert: the Online.net DNS API key (controls the whole
+# rationale as uptime-cert: the Online.net DNS API key (controls the whole
 # flefevre.fr zone) stays on a single host, immich never holds it. acme.sh +
 # the LE account are already installed by the adguard-home role.
 #
@@ -15,7 +15,7 @@
 # stays on this host, never in vault. The immich play authorizes the matching
 # public half on immich's certdeploy user. So there is nothing to install here.
 
-# Same issuance recipe as adguard-home's/bromine's own certs, single-host (-d),
+# Same issuance recipe as adguard-home's own cert, single-host (-d),
 # EC-256, DNS-01 via Online.net. rc=2 = "not yet due for renewal" → success.
 - name: Issue certificate for {{ immich_domain }}
   command: >

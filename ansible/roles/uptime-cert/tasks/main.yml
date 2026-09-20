@@ -1,7 +1,7 @@
 ---
 # Issues the Let's Encrypt cert for {{ uptime_domain }} (uptime.flefevre.fr) ON
 # THE ADGUARD LXC and pushes it to the uptime LXC over SSH via acme.sh's ssh
-# deploy-hook. Same rationale as immich-cert/bromine-cert: the Online.net DNS
+# deploy-hook. Same rationale as immich-cert: the Online.net DNS
 # API key (controls the whole flefevre.fr zone) stays on a single host, uptime
 # never holds it. acme.sh + the LE account are already installed by the
 # adguard-home role.
@@ -15,7 +15,7 @@
 # host, never in vault. The uptime play authorizes the matching public half on
 # uptime's certdeploy user. So there is nothing to install here.
 
-# Same issuance recipe as immich/bromine: single-host (-d), EC-256, DNS-01 via
+# Same issuance recipe as immich: single-host (-d), EC-256, DNS-01 via
 # Online.net. rc=2 = "not yet due for renewal" → success.
 - name: Issue certificate for {{ uptime_domain }}
   command: >
