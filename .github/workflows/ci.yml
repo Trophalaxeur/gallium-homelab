@@ -1,0 +1,81 @@
+---
+# Static checks only — nothing here touches gallium. No Proxmox credentials, no
+# vault password, no SSH key is available to CI by design: `terraform validate`
+# and `ansible-playbook --syntax-check` are both offline operations.
+#
+# This repo carries ~127 pre-existing ansible-lint findings (mostly missing
+# FQCN). They are frozen in .ansible-lint-ignore as a baseline, so CI is green
+# today while any NEW violation fails the build. Burning the baseline down is a
+# separate chore, not a merge blocker.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    name: terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # Matches required_version (">= 1.5") in terraform/main.tf.
+          terraform_version: "1.15.9"
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+      # -backend=false: there is no remote backend, and we must not touch the
+      # local state. This only resolves the bpg/proxmox provider so that
+      # validate can typecheck the resources.
+      # NOTE: .terraform.lock.hcl is gitignored in this repo, so providers are
+      # resolved fresh here rather than from a committed lock.
+      - name: Init (no backend)
+        run: terraform -chdir=terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform -chdir=terraform validate -no-color
+
+  ansible:
+    name: ansible syntax + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ansible and ansible-lint
+        run: pip install --disable-pip-version-check ansible-core ansible-lint
+
+      - name: Install required collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      # Runs from ansible/ because ansible.cfg points at inventory.ini with a
+      # relative path. Resolves roles and play structure without connecting to
+      # any host and without decrypting the vault (group_vars/all/vault.yml is
+      # gitignored and simply absent here).
+      - name: Syntax check
+        working-directory: ansible
+        run: ansible-playbook playbook.yml --syntax-check
+
+      # Runs from the REPO ROOT, not ansible/: .ansible-lint-ignore stores paths
+      # relative to the root ("ansible/playbook.yml fqcn[action-core]"), so
+      # linting from ansible/ silently misses the whole baseline and exits 2.
+      # --offline keeps the run deterministic (no version/dependency fetching).
+      - name: Lint
+        run: ansible-lint --offline

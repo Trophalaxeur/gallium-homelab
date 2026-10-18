@@ -67,6 +67,16 @@ resource "proxmox_virtual_environment_container" "adguard" {
   features {
     nesting = true
   }
+
+  # First to boot, before every other LXC (neon 2, pbs 4, immich 5, backup 6,
+  # uptime 7, homeassistant 8). AdGuard is the homelab's resolver: any service
+  # that reaches the internet at startup fails until it answers. Home Assistant
+  # made this visible — its cloud integrations (Overkiz for the Thermor towel
+  # rail) resolve at boot. They do retry, but ordering the resolver first
+  # removes the race instead of relying on retries.
+  startup {
+    order = 1
+  }
 }
 
 output "adguard_ip" {

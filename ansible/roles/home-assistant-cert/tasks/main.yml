@@ -18,7 +18,7 @@
 # Same issuance recipe as immich/uptime: single-host (-d), EC-256, DNS-01 via
 # Online.net. rc=2 = "not yet due for renewal" → success.
 - name: Issue certificate for {{ homeassistant_domain }}
-  command: >
+  ansible.builtin.command: >
     /root/.acme.sh/acme.sh --issue
     -d {{ homeassistant_domain }}
     --dns dns_online
@@ -40,7 +40,7 @@
 # every future renewal. Run each play (changed_when: false) so homeassistant
 # always ends up with the current cert — self-heals if the LXC was rebuilt.
 - name: Deploy certificate to homeassistant over SSH (and restart Caddy)
-  command: /root/.acme.sh/acme.sh --deploy -d {{ homeassistant_domain }} --deploy-hook ssh
+  ansible.builtin.command: /root/.acme.sh/acme.sh --deploy -d {{ homeassistant_domain }} --deploy-hook ssh
   environment:
     HOME: /root
     DEPLOY_SSH_USER: certdeploy

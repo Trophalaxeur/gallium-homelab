@@ -1,0 +1,12 @@
+---
+# ansible-lint configuration for this repo.
+#
+# `role-name` is skipped permanently, not grandfathered: it demands
+# ^[a-z][a-z0-9_]*$ (snake_case), while CLAUDE.md mandates kebab-case for every
+# folder in the repo. The project convention wins — all 10 roles are kebab-case
+# on purpose (adguard-home, uptime-kuma, home-assistant, ...).
+skip_list:
+  - role-name
+
+exclude_paths:
+  - .github/
