@@ -36,6 +36,10 @@ uptime_vmid         = 106
 uptime_ip           = "192.168.1.65"
 uptime_lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 
+homeassistant_vmid         = 107
+homeassistant_ip           = "192.168.1.66"
+homeassistant_lxc_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
 # Secrets — ne jamais committer terraform.tfvars
 proxmox_api_token = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 root_password     = ""

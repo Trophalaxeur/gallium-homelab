@@ -1,0 +1,9 @@
+---
+homeassistant_install_dir: /opt/home-assistant
+# Port HA listens on INSIDE the LXC. Because the container runs with
+# network_mode: host (see docker-compose.yml.j2), this port is bound on the LXC
+# itself — Caddy is the only thing fronting it, on :443.
+homeassistant_port: 8123
+# Drives HA's sun/scheduling and the recorder timestamps. Must match the
+# physical location, not the host's locale.
+homeassistant_timezone: "Europe/Paris"

@@ -1,0 +1,18 @@
+---
+# HA only reads configuration.yaml and the automation includes at startup, so a
+# template change needs a container restart (not a reload).
+- name: Restart home assistant
+  ansible.builtin.command: docker compose restart homeassistant
+  args:
+    chdir: "{{ homeassistant_install_dir }}"
+  changed_when: true
+
+# reload (not restart): picks up Caddyfile changes without dropping the
+# listener. Caddy validates on reload and keeps the old config on failure, so a
+# reload before the cert has been pushed from adguard is a safe no-op error
+# rather than an outage.
+- name: Reload caddy
+  ansible.builtin.systemd:
+    name: caddy
+    state: reloaded
+  failed_when: false

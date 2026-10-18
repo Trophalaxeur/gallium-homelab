@@ -1,0 +1,24 @@
+# Managed by Ansible (home-assistant role). Home Assistant Container — the
+# Supervisor-less install type, so there is no app store: every companion
+# service (Mosquitto + Zigbee2MQTT in phase 2, evcc in phase 3) is added here
+# as its own service. Version pinned via homeassistant_version (group_vars) —
+# never :latest or :stable.
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:{{ homeassistant_version }}
+    container_name: homeassistant
+    restart: unless-stopped
+    # Mandatory, not a convenience: HA discovers devices through mDNS/SSDP
+    # broadcasts, and Shelly gen1 devices push CoIoT to UDP 5683 — neither
+    # crosses a Docker bridge network. Consequence: no `ports:` mapping is
+    # possible here, HA binds {{ homeassistant_port }} on the LXC directly.
+    network_mode: host
+    environment:
+      TZ: "{{ homeassistant_timezone }}"
+    volumes:
+      # Config, the .storage JSON (integrations, entity registry) and the
+      # recorder SQLite DB. Lives on the LXC rootfs → swept into PBS with the
+      # container, provided this LXC's vmid is in pbs_backup_vmids.
+      - ./config:/config
+      # HA reads the host clock for sun elevation and scheduling.
+      - /etc/localtime:/etc/localtime:ro

@@ -1,0 +1,29 @@
+# Managed by Ansible (home-assistant role) — do not edit on the host.
+#
+# OWNERSHIP (decision 2026-10-18): Git owns the automations. The HA UI
+# automation editor only ever writes to an UNLABELED `automation:` include —
+# there is none here, so the editor cannot overwrite what this repo declares.
+# Creating an automation from the UI will therefore fail; that is the point.
+# To re-enable UI editing later, add a second include:
+#     automation ui: !include automations.yaml
+# and create that file. The two keys coexist (labels must differ).
+#
+# What is deliberately NOT here: the integrations themselves. HA stores them in
+# /config/.storage/core.config_entries as internal JSON that must not be
+# hand-edited. Adding Overkiz, SolarEdge or a wallbox is a UI step on every
+# install type — nothing to template, by design.
+
+default_config:
+
+http:
+  # Caddy terminates TLS on :443 on this same LXC and reverse-proxies to
+  # 127.0.0.1:{{ homeassistant_port }}. Without these, HA logs every request as
+  # coming from the proxy and refuses the forwarded client address.
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+
+# Git-owned automations, templated from this repo. Labeled include on purpose —
+# see the OWNERSHIP note above.
+automation ansible: !include automations-managed.yaml

@@ -81,3 +81,19 @@ uptime_domain: "uptime.flefevre.fr"
 # Pinned (never :latest). Stable v1 line — verify the latest patch tag on
 # https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping.
 uptime_kuma_version: "1.23.16"
+
+# --- home assistant (domotique) ---
+# LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — decision
+# 2026-10-18: every phase-1 device speaks IP (Thermor Allure 4 via the Overkiz
+# cloud integration, Shelly over local Wi-Fi, inverter and wallbox on the LAN),
+# so nothing needs the Supervisor, an app, or Matter/Thread.
+homeassistant_ip: "192.168.1.66"
+# Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
+# acme-on-adguard pattern as immich/uptime. Also the base URL for the MCP
+# endpoint Claude Code connects to (/api/mcp).
+homeassistant_domain: "homeassistant.flefevre.fr"
+# Pinned (never :latest / :stable). HA ships a feature release every month;
+# check https://github.com/home-assistant/core/releases before bumping.
+# ⚠️ Recorder schema migrations are one-way — there is no downgrade once HA has
+# started on a newer version. Take a PBS snapshot before a major bump.
+homeassistant_version: "2026.10.2"

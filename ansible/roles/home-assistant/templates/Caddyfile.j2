@@ -1,0 +1,17 @@
+# Managed by Ansible (home-assistant role) — do not edit on the host.
+#
+# Same pattern as immich/uptime: the cert is issued on the AdGuard LXC
+# (acme.sh, DNS-01 via Online.net) and pushed here over SSH by the
+# home-assistant-cert role. Caddy only terminates TLS on :443 and proxies to
+# the HA container, which binds {{ homeassistant_port }} on the LXC itself
+# (network_mode: host). Caddy forwards HA's websocket transparently — the
+# frontend and the MCP/REST API both need it.
+#
+# NOTE: {{ homeassistant_port }} stays reachable on the LAN on purpose. Shelly
+# gen1 devices push CoIoT to UDP 5683 and ESPHome nodes talk to HA directly;
+# machine-to-machine traffic on the LAN does not go through TLS here. HTTPS is
+# for the human UI and for Claude Code's MCP client.
+{{ homeassistant_domain }} {
+    tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
+    reverse_proxy 127.0.0.1:{{ homeassistant_port }}
+}
