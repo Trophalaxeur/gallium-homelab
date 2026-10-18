@@ -15,6 +15,13 @@
 
 default_config:
 
+homeassistant:
+  # Behind a reverse proxy HA cannot reliably infer its own address, which
+  # breaks the links it generates (companion app, webhooks). Only the internal
+  # URL is set: {{ homeassistant_domain }} resolves through the AdGuard rewrite
+  # and is never port-forwarded, so there is no external URL to declare.
+  internal_url: "https://{{ homeassistant_domain }}"
+
 http:
   # Caddy terminates TLS on :443 on this same LXC and reverse-proxies to
   # 127.0.0.1:{{ homeassistant_port }}. Without these, HA logs every request as
@@ -23,6 +30,20 @@ http:
   trusted_proxies:
     - 127.0.0.1
     - ::1
+  # Enabled together with use_x_forwarded_for on purpose: the ban list keys on
+  # the client address, so turning the first on without the second would count
+  # every failed login against the proxy instead of the real caller.
+  # Bans are written to /config/ip_bans.yaml — delete the entry to unban.
+  ip_ban_enabled: true
+  login_attempts_threshold: 5
+
+recorder:
+  # Explicit rather than relying on the 10-day default: this LXC has a 16 Go
+  # rootfs and the detailed history is what grows. Long-term statistics (the
+  # hourly min/max/mean behind the Energy dashboard) live in a separate table
+  # that purge never touches — shortening this does NOT cost solar history.
+  purge_keep_days: 14
+  auto_purge: true
 
 # Git-owned automations, templated from this repo. Labeled include on purpose —
 # see the OWNERSHIP note above.
