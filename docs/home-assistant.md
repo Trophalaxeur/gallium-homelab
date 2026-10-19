@@ -59,10 +59,15 @@ configuration is not YAML**, on any install type.
 |---|---|
 | `configuration.yaml` | `/config/.storage/*.json` |
 | `automations-managed.yaml` | integrations, entity registry, areas, dashboards |
+| | HTTP server settings — reverse proxy, IP ban, listen addresses (since 2026.8) |
 
 Integrations are stored in `/config/.storage/core.config_entries` as internal
 JSON that must not be hand-edited. Adding Overkiz or a solar inverter is a UI
 step by design — there is nothing to template.
+
+The HTTP server settings went the same way in Home Assistant 2026.8: they now
+live in Settings → System → Network, and the template ships no `http:` block.
+See [Network settings](#network-settings--one-time-after-the-first-deploy).
 
 Automations are Git-owned, enforced structurally rather than by convention.
 `configuration.yaml` declares a **labeled** include:
@@ -90,8 +95,8 @@ shortcut:
 
 The consequence is that no `ports:` mapping is possible — HA binds 8123 on the
 LXC itself, and Caddy reverse-proxies to `127.0.0.1:8123` from the same network
-namespace. That is also why `trusted_proxies` is `127.0.0.1` rather than a
-Docker subnet.
+namespace. That is also why the trusted proxy (set in the UI, see below) is
+`127.0.0.1` rather than a Docker subnet.
 
 ## Backups — read this before trusting them
 
@@ -144,6 +149,115 @@ must stay in scope — `--limit homeassistant` alone silently skips it.
 Caddy is enabled but not started by the role: it refuses to start while
 `/etc/caddy/cert/*.pem` are absent. The `home-assistant-cert` role's deploy
 hook restarts it right after landing the certificate.
+
+The deploy is not finished at this point: the HTTPS URL answers **400** until
+the network settings below exist.
+
+## Network settings — one-time, after the first deploy
+
+Home Assistant 2026.8 moved the HTTP server settings from `configuration.yaml`
+to the UI. Measured on the pinned 2026.10.2: an `http:` block still works, but
+is imported as unconfirmed *pending* settings and raises a
+`http/deprecated_yaml` repair issue. The template therefore ships none, and
+these settings are set by hand once — like onboarding or backups.
+
+On a fresh install, Home Assistant does not trust Caddy yet: every request
+through `https://homeassistant.flefevre.fr` gets **HTTP 400** (measured). Do
+the onboarding at `http://192.168.1.66:8123`, then the two steps below, in
+Settings → System → Network.
+
+Saving these settings restarts Home Assistant, and **an administrator must
+confirm them within 5 minutes, or Home Assistant reverts to the previous
+ones**. That is what makes each step below safe to try.
+
+**Step 1 — trust the proxy.** Keep *Listen addresses* empty for now.
+
+| Setting | Value |
+|---|---|
+| Trust X-Forwarded-For | on |
+| Trusted proxies | `127.0.0.1` |
+| IP ban | on |
+| Login attempts threshold | `5` |
+
+Save, confirm, then check that `https://homeassistant.flefevre.fr` loads.
+Only `127.0.0.1` is trusted because it is Caddy's upstream: a request carrying
+`X-Forwarded-For` from an unlisted source such as `::1` gets 400 (measured).
+
+**Step 2 — no plaintext on the LAN.** Set *Listen addresses* to `127.0.0.1`.
+After the restart, the `http://192.168.1.66:8123` tab stops answering — that is
+the point. **Confirm from the HTTPS URL**, within 5 minutes; if you don't, Home
+Assistant reverts and the IP answers again. Caddy then becomes the only way in.
+The one known casualty is battery-powered Shelly gen2, whose websocket targets
+HA's IP directly; none are deployed.
+
+### IP ban — measured behaviour
+
+On 2026.10.2: after 5 failed attempts, the 6th request gets 403 and the client
+is written to `/config/ip_bans.yaml`. A request with an **invalid bearer
+token counts as a failed attempt**. Behind Caddy, the ban is keyed on the
+`X-Forwarded-For` client address, not on Caddy. Bans never expire.
+
+- To unban, delete the entry from `/config/ip_bans.yaml` **and restart** Home
+  Assistant — deleting the line alone is not enough.
+- Never authenticate against Home Assistant from the LXC itself
+  (`127.0.0.1`, no `X-Forwarded-For`): a local script with a stale token would
+  ban `127.0.0.1` — that is, Caddy, and therefore everyone.
+
+### Name resolution on the LAN
+
+The Livebox hands DHCP clients `192.168.1.53` (AdGuard), then `1.1.1.1`
+(measured on thallium's wlan0 lease). `homeassistant.flefevre.fr` exists only
+as an AdGuard rewrite, with no public record, so a client that falls back to
+`1.1.1.1` cannot resolve it — expect occasional failures from phones. The LXCs
+themselves do not use AdGuard at all: they resolve through the Livebox.
+
+## Compliance with the official Container install
+
+Checked against [the official Container instructions](https://www.home-assistant.io/installation/linux/)
+on 2026-10-19.
+
+| Official requirement | Here |
+|---|---|
+| Docker Engine 23.0.0 or later, not Docker Desktop | `docker.io` 26.1.5 from Debian trixie |
+| Official image `ghcr.io/home-assistant/home-assistant` | Same image, pinned `version@digest` instead of `:stable` |
+| `/config`, `/etc/localtime:ro`, `network_mode: host`, `TZ`, `restart: unless-stopped` | Identical |
+| `stop_grace_period: 60s` | Identical — see the comment in `docker-compose.yml.j2` for the measured shutdown chain |
+| Update with `pull` then `up -d`; restart with `docker compose restart` | What the role and its handler do |
+
+Two keys of the official compose are left out on purpose:
+
+- **`privileged: true`** appears in the official examples but is never listed
+  as a prerequisite. It grants every host device and every capability. When a
+  device is needed, the documented alternative is a targeted `devices:`
+  mapping.
+- **`/run/dbus:/run/dbus:ro`** is described as optional, needed only for the
+  Bluetooth integration. This LXC has no Bluetooth adapter; Bluetooth goes
+  through an ESPHome proxy instead.
+
+**Grey zone — Docker inside an LXC.** The documentation neither allows nor
+forbids it. [ADR 0012](https://github.com/home-assistant/architecture/blob/master/adr/0012-define-supported-installation-method.md)
+defines "supported" as *tested and documented*, which this nesting is not.
+Home Assistant's own code still classifies the install as
+**Home Assistant Container**, the supported type: in 2026.10.2 the condition is
+`user == "root" and is_official_image()`, the latter checking for
+`/OFFICIAL_IMAGE` inside the image.
+
+That same condition rules out a tempting hardening: **never add a non-root
+`user:` to the service.** The install would then report itself as
+*Unsupported Third Party Container*.
+
+**First-boot check.** Dropping `privileged` was measured on a plain Docker
+host, not inside this LXC. After the first start, look for errors from the
+discovery integrations that `default_config` loads:
+
+```bash
+ssh root@homeassistant.lan \
+  'cd /opt/home-assistant && docker compose logs homeassistant' \
+  | grep -E 'ERROR|WARNING' | grep -iE 'usb|bluetooth|dhcp'
+```
+
+Bluetooth reporting a missing adapter or D-Bus is expected here. Errors from
+`usb` or `dhcp` are not — they would point at the missing privileged mode.
 
 ## Roadmap
 

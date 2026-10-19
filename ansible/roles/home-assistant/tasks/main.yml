@@ -49,32 +49,92 @@
     group: root
     mode: "0644"
 
-# Ansible owns configuration.yaml and automations-managed.yaml. It does NOT own
-# .storage/ (integrations, entity registry, dashboards) — that is HA's internal
-# JSON, UI-only on every install type.
-- name: Deploy Home Assistant configuration.yaml
-  ansible.builtin.template:
-    src: configuration.yaml.j2
-    dest: "{{ homeassistant_install_dir }}/config/configuration.yaml"
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart home assistant
-
-- name: Deploy Git-owned automations
-  ansible.builtin.template:
-    src: automations-managed.yaml.j2
-    dest: "{{ homeassistant_install_dir }}/config/automations-managed.yaml"
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart home assistant
-
+# Pulled BEFORE the config is touched: the validation step below runs
+# check_config inside this exact image, so a version bump is validated against
+# the schema of the version about to run, not the one currently running.
 - name: Pull Home Assistant image
   ansible.builtin.command: docker compose pull
   args:
     chdir: "{{ homeassistant_install_dir }}"
   changed_when: false
+
+# --- Git-owned config: render → validate → swap in --------------------------
+# Ansible owns configuration.yaml and automations-managed.yaml. It does NOT own
+# .storage/ (integrations, entity registry, dashboards) — that is HA's internal
+# JSON, UI-only on every install type.
+#
+# The templates are NOT rendered straight into config/. A YAML syntax error in
+# either file stops configuration.yaml from loading and HA boots into recovery
+# mode — every integration and automation stopped — while a plain
+# template + restart would still report the play green. So both files are
+# rendered into a staging directory, validated there, and copied into config/
+# only once check_config passes. A rejected change never reaches HA.
+- name: Create the config staging directory
+  ansible.builtin.file:
+    path: "{{ homeassistant_staging_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Render configuration.yaml into staging
+  ansible.builtin.template:
+    src: configuration.yaml.j2
+    dest: "{{ homeassistant_staging_dir }}/configuration.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render the Git-owned automations into staging
+  ansible.builtin.template:
+    src: automations-managed.yaml.j2
+    dest: "{{ homeassistant_staging_dir }}/automations-managed.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Measured against this exact image (2026.10.2), three cases:
+#   - valid config                    → rc=0, no "ERROR:" line
+#   - YAML syntax error               → rc=1   (the recovery-mode case)
+#   - valid YAML, invalid automation  → rc=0 but one "ERROR:" line. HA would
+#     silently disable that automation; --fail-on-warnings does not catch it
+#     and the --json report counts 0 errors.
+# Hence the double condition: the valid config produced zero "ERROR:" lines in
+# the same measurement, so failing on any of them has no false positive.
+# --network none: the check needs nothing from the network and must not reach
+# it. --entrypoint python3: the image's default /init (s6) would start HA.
+# :ro — check_config writes nothing into the directory it validates (measured).
+- name: Validate the staged config with check_config
+  ansible.builtin.command: >
+    docker run --rm --network none
+    --entrypoint python3
+    -v {{ homeassistant_staging_dir }}:/config:ro
+    {{ homeassistant_image }}
+    -m homeassistant --script check_config --config /config
+  register: ha_check_config
+  changed_when: false
+  failed_when: >
+    ha_check_config.rc != 0
+    or (ha_check_config.stdout_lines + ha_check_config.stderr_lines)
+    | select('match', '^ERROR:') | list | length > 0
+
+- name: Install the validated configuration.yaml
+  ansible.builtin.copy:
+    src: "{{ homeassistant_staging_dir }}/configuration.yaml"
+    dest: "{{ homeassistant_install_dir }}/config/configuration.yaml"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart home assistant
+
+- name: Install the validated Git-owned automations
+  ansible.builtin.copy:
+    src: "{{ homeassistant_staging_dir }}/automations-managed.yaml"
+    dest: "{{ homeassistant_install_dir }}/config/automations-managed.yaml"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart home assistant
 
 - name: Start Home Assistant
   ansible.builtin.command: docker compose up -d

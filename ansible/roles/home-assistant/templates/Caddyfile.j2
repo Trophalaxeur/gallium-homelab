@@ -7,10 +7,15 @@
 # (network_mode: host). Caddy forwards HA's websocket transparently — the
 # frontend and the MCP/REST API both need it.
 #
-# NOTE: {{ homeassistant_port }} stays reachable on the LAN on purpose. Shelly
-# gen1 devices push CoIoT to UDP 5683 and ESPHome nodes talk to HA directly;
-# machine-to-machine traffic on the LAN does not go through TLS here. HTTPS is
-# for the human UI and for Claude Code's MCP client.
+# Exposure model: HA's "Listen addresses" is set to 127.0.0.1 in the UI
+# (docs/home-assistant.md, "Network settings"), so this proxy is the ONLY way
+# in — no plaintext {{ homeassistant_port }} on the LAN. Nothing in phase 1
+# needs that port from the LAN: Shelly gen1 CoIoT is UDP 5683 (a separate
+# listener) and ESPHome is HA connecting OUT to the device on 6053. The one
+# known exception is battery-powered Shelly gen2, whose outbound websocket
+# targets HA's IP directly — none are deployed.
+# Until those UI settings exist (fresh install), HA answers 400 to everything
+# coming through here: it does not yet trust 127.0.0.1 as a proxy.
 {{ homeassistant_domain }} {
     tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
     reverse_proxy 127.0.0.1:{{ homeassistant_port }}

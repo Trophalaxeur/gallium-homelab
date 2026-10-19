@@ -8,10 +8,18 @@
 #     automation ui: !include automations.yaml
 # and create that file. The two keys coexist (labels must differ).
 #
-# What is deliberately NOT here: the integrations themselves. HA stores them in
-# /config/.storage/core.config_entries as internal JSON that must not be
-# hand-edited. Adding Overkiz, SolarEdge or a wallbox is a UI step on every
-# install type — nothing to template, by design.
+# What is deliberately NOT here:
+#   - the integrations themselves. HA stores them in
+#     /config/.storage/core.config_entries as internal JSON that must not be
+#     hand-edited. Adding Overkiz, SolarEdge or a wallbox is a UI step on every
+#     install type — nothing to template, by design.
+#   - the HTTP server settings (reverse proxy trust, trusted proxies, IP ban,
+#     listen addresses). Home Assistant 2026.8 moved them from YAML to the UI
+#     (Settings → System → Network). On the pinned 2026.10.2, an `http:` block
+#     still works but is imported as unconfirmed "pending" settings and raises a
+#     `http/deprecated_yaml` repair issue (measured). They are configured once,
+#     by hand, after the first deploy — see docs/home-assistant.md, "Network
+#     settings". Until then, every request through Caddy gets HTTP 400.
 
 default_config:
 
@@ -21,21 +29,6 @@ homeassistant:
   # URL is set: {{ homeassistant_domain }} resolves through the AdGuard rewrite
   # and is never port-forwarded, so there is no external URL to declare.
   internal_url: "https://{{ homeassistant_domain }}"
-
-http:
-  # Caddy terminates TLS on :443 on this same LXC and reverse-proxies to
-  # 127.0.0.1:{{ homeassistant_port }}. Without these, HA logs every request as
-  # coming from the proxy and refuses the forwarded client address.
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 127.0.0.1
-    - ::1
-  # Enabled together with use_x_forwarded_for on purpose: the ban list keys on
-  # the client address, so turning the first on without the second would count
-  # every failed login against the proxy instead of the real caller.
-  # Bans are written to /config/ip_bans.yaml — delete the entry to unban.
-  ip_ban_enabled: true
-  login_attempts_threshold: 5
 
 recorder:
   # Explicit rather than relying on the 10-day default: this LXC has a 16 Go
