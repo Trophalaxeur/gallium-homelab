@@ -69,11 +69,16 @@ resource "proxmox_virtual_environment_container" "adguard" {
   }
 
   # First to boot, before every other LXC (neon 2, pbs 4, immich 5, backup 6,
-  # uptime 7, homeassistant 8). AdGuard is the homelab's resolver: any service
-  # that reaches the internet at startup fails until it answers. Home Assistant
-  # made this visible — its cloud integrations (Overkiz for the Thermor towel
-  # rail) resolve at boot. They do retry, but ordering the resolver first
-  # removes the race instead of relying on retries.
+  # uptime 7, homeassistant 8). AdGuard is the primary DNS the Livebox hands to
+  # DHCP clients on the LAN (measured 2026-10-18 on thallium's wlan0 lease:
+  # 192.168.1.53, then 1.1.1.1), and the only resolver that knows the
+  # *.flefevre.fr / *.lan rewrites. After a gallium reboot those clients lose
+  # homelab names until it answers; booting it first shortens that window.
+  #
+  # It is NOT a boot dependency of the other LXCs: they have static network
+  # config and resolve through the Livebox (nameserver 192.168.1.1, inherited
+  # from the Proxmox host), which does not forward to AdGuard — measured with
+  # `dig @192.168.1.1 uptime.flefevre.fr` returning nothing.
   startup {
     order = 1
   }
