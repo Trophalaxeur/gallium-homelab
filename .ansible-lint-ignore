@@ -1,8 +1,4 @@
 # This file contains ignores rule violations for ansible-lint
-ansible/playbook.yml fqcn[action-core]
-ansible/playbook.yml no-changed-when
-ansible/playbook.yml risky-file-permissions
-ansible/playbook.yml yaml[line-length]
 ansible/roles/adguard-home/handlers/main.yml fqcn[action-core]
 ansible/roles/adguard-home/handlers/main.yml name[casing]
 ansible/roles/adguard-home/tasks/main.yml command-instead-of-shell

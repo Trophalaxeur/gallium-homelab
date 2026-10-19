@@ -3,9 +3,13 @@
 # vault password, no SSH key is available to CI by design: `terraform validate`
 # and `ansible-playbook --syntax-check` are both offline operations.
 #
-# This repo carries ~127 pre-existing ansible-lint findings (mostly missing
-# FQCN). They are frozen in .ansible-lint-ignore as a baseline, so CI is green
-# today while any NEW violation fails the build. Burning the baseline down is a
+# Pre-existing ansible-lint findings (mostly missing FQCN) are frozen in
+# .ansible-lint-ignore as a baseline so CI is green.
+# ⚠️ That baseline is per FILE + RULE, not per line: a NEW violation of an
+# already-baselined rule, in an already-baselined file, passes silently
+# (measured: rc=0). The guarantee only holds for files absent from it.
+# ansible/playbook.yml — where every new play lands — was therefore burned down
+# and removed from the baseline; keep it out. Burning down the rest is a
 # separate chore, not a merge blocker.
 name: ci
 
