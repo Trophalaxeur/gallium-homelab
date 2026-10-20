@@ -24,8 +24,9 @@ library and its database — and how to bring everything back after a failure.
 
 ## Architecture at a glance
 
-Three physical copies of the photos, in two+ locations, one off-site — the
-classic **3-2-1**, plus local ZFS snapshots and PBS on top.
+Three physical copies of the photos and of Home Assistant's backups, in two+
+locations, one off-site — the classic **3-2-1**, plus local ZFS snapshots and
+PBS on top.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -34,10 +35,13 @@ classic **3-2-1**, plus local ZFS snapshots and PBS on top.
 │  LXC neon ────┤                                             │
 │  LXC immich ──┼──→ [PBS LXC 103] ──→ [PBS datastore]        │
 │  LXC backup ──┤      incremental, dedup, verify             │
-│  LXC uptime ──┘                                             │
+│  LXC uptime ──┤                                             │
+│  LXC hassium ─┘                                             │
 │                                                             │
 │  rpool/data/immich-photos ──┬─ ZFS snapshots (sanoid)       │
 │   (photos + DB dumps)        └─ mount RO ──→ [LXC backup]   │
+│  rpool/data/hassium-backups ┬─ ZFS snapshots (sanoid)       │
+│   (HA backup .tar)           └─ mount RO ──→ [LXC backup]   │
 └───────────────────────────────────────────────┬────────────┘
                                                  │ rclone copy (nightly,
                                                  │ from LXC backup only)
@@ -45,9 +49,10 @@ classic **3-2-1**, plus local ZFS snapshots and PBS on top.
               ▼                                                 ▼
    [Scaleway One Zone]                             [External HDD, always-on]
    SSE-ONE + Object Lock 90d + scoped IAM          PLAINTEXT, bind-mount into
-   + lifecycle db-backups/ 90d                     LXC backup only, --backup-dir
-   ├── library/    (photos)                        3rd physical copy
-   └── db-backups/ (DB dumps)
+   + lifecycle db-backups/ hassium-backups/ 90d    LXC backup only, --backup-dir
+   ├── library/         (photos)                   3rd physical copy
+   ├── db-backups/      (DB dumps)
+   └── hassium-backups/ (HA backups)
 ```
 
 ### The four layers
@@ -63,6 +68,8 @@ classic **3-2-1**, plus local ZFS snapshots and PBS on top.
 last-resort copy — no lost key can ever brick it. The trade-off is accepted: a
 physical theft of the NUC exposes the HDD and the NVMe together. The copy that
 *leaves* the house (Scaleway) is encrypted; the copy in clear (HDD) never leaves.
+One exception: Home Assistant encrypts its archives itself, before they reach
+any copy — restoring them, from the HDD too, needs the emergency-kit key.
 
 **The guarantee:** to lose the photos you would have to lose *simultaneously*
 access to the password manager (the only path to the Scaleway account, hence the
@@ -77,9 +84,11 @@ physical HDD — two independent failures.
 |---|---|:--:|:--:|:--:|:--:|
 | **Immich photos/videos** (`library/`) | **DATA** | ✗¹ | ✓ | ✓ | ✓ |
 | **Immich PostgreSQL** (logical dump) | **DATA** | ✓² | ✓ | ✓ | ✓ |
+| **Home Assistant** (backup `.tar`: config, `.storage`, recorder DB) | **DATA** | ✗⁴ | ✓ | ✓ | ✓ |
 | adguard / neon / uptime OS + config | INFRA | ✓ | ✓ | ✗ | ✗ |
 | immich LXC OS (rootfs, incl. live Postgres) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | backup LXC OS (rclone/aws creds, crons) | INFRA | ✓ | ✓ | ✗ | ✗ |
+| hassium LXC OS (rootfs, incl. live recorder DB) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | Config host PVE (bridge, storage, ACL) | INFRA | ✗ | ✗ | ✗ | ✗³ |
 | Thumbnails, transcoded video, logs | disposable | ✗ | ✗ | ✗ | ✗ |
 
@@ -88,6 +97,10 @@ excluded from PBS, which would otherwise copy 200 GB block-level on every run.
 ² PBS captures the rootfs (block-level) as a *fallback*. The **logical dump is
 the source of truth** — see below.
 ³ **Not backed up anywhere** — recreated by the manual host-bootstrap runbook.
+⁴ On its own dataset (`rpool/data/hassium-backups`), a bind-mount — PBS never
+copies those. HA's own scheduled backup (daily 01:30, database included, 7
+kept) is the application-consistent copy; PBS still holds the hassium rootfs
+as a crash-consistent fallback. See `docs/home-assistant.md`.
 
 **3-2-1 applies to the DATA only.** System-LXC backups are local-only (PBS + ZFS
 on the same NVMe) — accepted, because that infra is recreatable from IaC.
@@ -131,7 +144,7 @@ next restore drill (Étape 6).
 ## The backup jobs
 
 All jobs run on the **dedicated `backup` LXC (105)** — never on Immich itself.
-The photos dataset is mounted **read-only** there; the HDD and the Scaleway
+The photos and `hassium-backups` datasets are mounted **read-only** there; the HDD and the Scaleway
 credentials exist only on this LXC. A compromised Immich (its web/API/ML surface)
 therefore has no write path to any backup copy (Scénario 6 isolation).
 
@@ -140,9 +153,9 @@ Managed by the `backup` Ansible role (`ansible/roles/backup/`). Crons
 
 | Schedule | Script | What it does |
 |---|---|---|
-| `02:00` daily | `backup-rclone-scaleway.sh` | `rclone copy` originals → `library/` and DB dumps → `db-backups/`, both with Object Lock Compliance +90 d. `thumbs/` and `encoded-video/` are **excluded** — regenerable, and their in-place rewrites collide with Object Lock (Forbidden overwrites → locked version pile-up). **Gates on the DB dump being < 25 h old** before pinging success. |
-| `02:20` daily | `backup-rclone-hdd.sh` | `rclone copy` photos → HDD, with `--backup-dir /mnt/hdd/.versions/<date>` so an in-place overwrite keeps the old version. **`mountpoint`-guarded** (Scénario 8). |
-| `03:00` Sunday | `backup-object-lock-renew.py` | Walks still-present `library/` objects and pushes their `retain-until-date` to now +90 d (sliding retention). `db-backups/` is deliberately **not** renewed — those age out via the bucket lifecycle. |
+| `02:00` daily | `backup-rclone-scaleway.sh` | `rclone copy` originals → `library/`, DB dumps → `db-backups/` and Home Assistant backups → `hassium-backups/`, all with Object Lock Compliance +90 d. `thumbs/` and `encoded-video/` are **excluded** — regenerable, and their in-place rewrites collide with Object Lock (Forbidden overwrites → locked version pile-up). **Gates on both a DB dump and an HA backup being < 25 h old** before pinging success. |
+| `02:20` daily | `backup-rclone-hdd.sh` | `rclone copy` photos and HA backups → HDD, with `--backup-dir /mnt/hdd/.versions/<date>` so an in-place overwrite keeps the old version. **`mountpoint`-guarded** (Scénario 8). |
+| `03:00` Sunday | `backup-object-lock-renew.py` | Walks still-present `library/` objects and pushes their `retain-until-date` to now +90 d (sliding retention). `db-backups/` and `hassium-backups/` are deliberately **not** renewed — those age out via the bucket lifecycle. |
 
 Key design points:
 
@@ -155,8 +168,9 @@ Key design points:
 - **The `mountpoint` guard is not optional.** Without it, a detached HDD would
   make rclone write into the backup LXC's rootfs with no error, and the job would
   ping success while the 3rd copy silently didn't happen.
-- **Lifecycle on `db-backups/` (90 d)** bounds accumulation — `copy` never
-  deletes, so timestamped dumps would otherwise pile up forever.
+- **Lifecycle on `db-backups/` and `hassium-backups/` (90 d,
+  `scripts/scaleway-lifecycle.json`)** bounds accumulation — `copy` never
+  deletes, so timestamped dumps and archives would otherwise pile up forever.
 
 ---
 
@@ -197,6 +211,7 @@ Scaleway Object Storage, One Zone, ~200 GB baseline (verified pricing
 |---|---|
 | Photos live (200 GB) | 1.61 |
 | Retained DB dumps (~90 × <1 GB, lifecycle-bounded) | < 0.40 |
+| Retained HA backups (~90 × <100 MB, lifecycle-bounded) | < 0.10 |
 | **Total** | **~2.00** |
 | Full-restore egress (one-shot, 75 GB free then €0.01/GB) | 1.25 |
 
@@ -233,6 +248,10 @@ covers "lost an AZ".
 SSE-ONE decrypts transparently (key lives with the Scaleway account, not the
 password manager).
 
+Home Assistant comes back after step 3: onboarding → restore from backup →
+upload the latest `.tar` from `hassium-backups/` (or the HDD) → enter the
+emergency-kit key from LastPass.
+
 ---
 
 ## Secret-recreation checklist (Scénario 7) — the critical artifact
@@ -258,6 +277,7 @@ re-enter each value:
 | `vault_kuma_push_rclone_scaleway` / `vault_kuma_push_rclone_hdd` / `vault_kuma_push_object_lock_renew` | Create three Push monitors in the Kuma UI, copy each token into the vault. |
 | Immich SMTP app password | New Gmail App Password — entered in the **Immich UI** (Settings → Notifications), stored in the Immich DB, not our IaC. |
 | Scaleway bootstrap creds (`scripts/.scaleway-credentials.env`) | Bootstrap-only (bucket already exists, Object Lock irreversible) — regenerate only to re-run the bootstrap script. |
+| Home Assistant backup encryption key (emergency kit) | **The exception: NOT re-issuable.** Generated by HA when backups are set up; the only way to open the archives on Scaleway and the HDD. Kept in **LastPass**. A new key only applies to backups made after it. |
 | ansible-vault password / `.vault_pass` | New vault password of your choosing (re-encrypts the recreated `vault.yml`). |
 | SSH keypair | `~/.ssh/id_ed25519.pub` re-authorized via `terraform.tfvars` + `vars.yml`. |
 | adguard→{immich,uptime} cert deploy keys | **Not vault secrets** — regenerated on adguard at deploy time. Re-run `--limit adguard,<host>` once after an adguard rebuild. |

@@ -47,8 +47,8 @@ resource "proxmox_virtual_environment_container" "immich" {
     size = 20
   }
 
-  # Bind-mount du dataset ZFS créé par le play Ansible "Provision ZFS dataset
-  # for Immich photos". Exclu de PBS : protégé par sanoid (template_photos) +
+  # Bind-mount du dataset ZFS créé par le play Ansible "Provision ZFS
+  # datasets". Exclu de PBS : protégé par sanoid (template_photos) +
   # rclone (Scaleway/HDD) à la place.
   # ⚠️ Le token terraform@pve!terraform_token (scopé, pas root@pam) ne peut PAS
   # créer ce bloc lui-même — l'API Proxmox refuse "mount point type bind" hors

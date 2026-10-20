@@ -5,6 +5,12 @@
       "Status": "Enabled",
       "Filter": { "Prefix": "db-backups/" },
       "Expiration": { "Days": 90 }
+    },
+    {
+      "ID": "expire-hassium-backups-90d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "hassium-backups/" },
+      "Expiration": { "Days": 90 }
     }
   ]
 }

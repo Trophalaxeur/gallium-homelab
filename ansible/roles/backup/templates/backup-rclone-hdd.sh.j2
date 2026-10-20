@@ -12,6 +12,7 @@
 set -uo pipefail
 
 SRC="{{ backup_photos_src }}"
+HASSIUM_SRC="{{ backup_hassium_src }}"
 HDD="{{ backup_hdd_mount }}"
 DEST="${HDD}/immich-photos"
 LOG="/var/log/backup-rclone-hdd.log"
@@ -34,15 +35,26 @@ fi
 rclone copy "$SRC" "$DEST" \
   --backup-dir "${HDD}/.versions/$(date +%F)" \
   --transfers 4 --checkers 8 --stats-one-line --stats 1m
-rc=$?
+rc_photos=$?
+
+# Home Assistant's backups. HA names each file with its own timestamp, so
+# nothing is ever overwritten; --backup-dir still guards a rewrite, in its own
+# sub-folder so it can't mingle with the photos' versions.
+rclone copy "$HASSIUM_SRC" "${HDD}/hassium-backups" \
+  --backup-dir "${HDD}/.versions/$(date +%F)/hassium-backups" \
+  --transfers 4 --checkers 8 --stats-one-line --stats 1m
+rc_ha=$?
+
+rc=$(( rc_photos != 0 ? rc_photos : rc_ha ))
 
 if [[ $rc -eq 0 ]]; then
-  echo "OK — rc=$rc"
+  echo "OK — photos rc=$rc_photos ha rc=$rc_ha"
   curl -fsS -m 15 --retry 3 -G "$KUMA_URL" \
     --data-urlencode "status=up" --data-urlencode "msg=OK" >/dev/null || true
 else
-  echo "FAIL — rc=$rc"
-  printf 'rclone → HDD failed on %s (rc=%s). See %s\n' "$(hostname)" "$rc" "$LOG" \
+  echo "FAIL — photos rc=$rc_photos ha rc=$rc_ha"
+  printf 'rclone → HDD failed on %s (photos rc=%s, ha rc=%s). See %s\n' \
+    "$(hostname)" "$rc_photos" "$rc_ha" "$LOG" \
     | mail -r "$FROM" -s "[backup] rclone → HDD FAILED" "$ADMIN" || true
   curl -fsS -m 15 -G "$KUMA_URL" \
     --data-urlencode "status=down" --data-urlencode "msg=rclone-hdd failed" >/dev/null || true

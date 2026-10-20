@@ -123,7 +123,7 @@ must be updated on **every** Immich upgrade.
   `certdeploy` (TLS reverse proxy)
 - Ansible role `immich-cert` (runs on **adguard**): issues `photos.flefevre.fr`
   via acme.sh DNS-01 and pushes it here over SSH
-- Ansible play "Provision ZFS dataset for Immich photos" (`hosts: proxmox`):
+- Ansible play "Provision ZFS datasets" (`hosts: proxmox`):
   creates `rpool/data/immich-photos` and chowns it to the LXC's mapped root
 - Ansible play "Register PBS storage and daily backup job": VMID 104 is in
   `pbs_backup_vmids` (rootfs only — photos excluded)

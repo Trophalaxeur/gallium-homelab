@@ -135,7 +135,7 @@
 # Caddy reverse proxy, the homelab's reference TLS pattern. Decisions Révision 3 of
 # ~/.claude/plans/backup-strategy.md: Docker Compose runtime, ML enabled,
 # pinned image versions. NOTE — required run order (not the same as this
-# file's play order): 1) the "Provision ZFS dataset for Immich photos" play
+# file's play order): 1) the "Provision ZFS datasets" play
 # (further down this file, hosts: proxmox) must run first, 2) then
 # `terraform apply` creates the LXC with its mount_point pointing at that
 # dataset (terraform/immich.tf), 3) only then can this play reach the immich
@@ -297,12 +297,13 @@
         - pbs_existing_job.vmid | default('') != pbs_backup_vmids or
           pbs_existing_job.comment | default('') != pbs_backup_comment
 
-# Standalone ZFS dataset for Immich photos+DB dumps (backup=no equivalent: not
-# a container rootfs, excluded from PBS by nature, protected instead by sanoid
-# + rclone — see ~/.claude/plans/backup-strategy.md, Étape 3). Must exist before
-# the immich LXC is created (Terraform mount_point references this path) and
-# before the zfs-maintenance play below applies its sanoid template.
-- name: Provision ZFS dataset for Immich photos
+# Standalone ZFS datasets for DATA that lives outside an LXC rootfs: Immich
+# photos + DB dumps, and Home Assistant's scheduled backups. Not a container
+# rootfs, so excluded from PBS by nature, protected instead by sanoid + rclone
+# (see ~/.claude/plans/backup-strategy.md, Étape 3). Each must exist before the
+# LXC that mounts it is created (Terraform mount_point references the path)
+# and before the zfs-maintenance play below applies its sanoid config.
+- name: Provision ZFS datasets
   hosts: proxmox
   become: true
   gather_facts: false
@@ -321,36 +322,47 @@
       ansible.builtin.gather_facts:
       tags: always
 
+  vars:
+    proxmox_datasets:
+      - "{{ immich_photos_dataset }}"
+      - "{{ hassium_backups_dataset }}"
+
   tasks:
-    - name: Check if the immich-photos dataset already exists
-      ansible.builtin.command: zfs list -H -o name {{ immich_photos_dataset }}
-      register: immich_dataset_check
+    - name: Check which datasets already exist
+      ansible.builtin.command: zfs list -H -o name {{ item }}
+      loop: "{{ proxmox_datasets }}"
+      register: proxmox_dataset_check
       failed_when: false
       changed_when: false
 
-    - name: Create the immich-photos ZFS dataset
-      ansible.builtin.command: zfs create {{ immich_photos_dataset }}
+    - name: Create the missing ZFS datasets
+      ansible.builtin.command: zfs create {{ item.item }}
+      loop: "{{ proxmox_dataset_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
       # Guarded by the `when:` below — it only runs when the change is needed,
       # so every run that executes it is a real change.
       changed_when: true
-      when: immich_dataset_check.rc != 0
+      when: item.rc != 0
 
-    # The immich LXC (104) is unprivileged: its root (uid/gid 0) maps to host
-    # uid/gid 100000 (default Proxmox range, /etc/subuid|subgid "root:100000:
-    # 65536"). Bind-mounted as-is, this dataset is owned by host root (0:0),
-    # which shows up as nobody:nogroup inside the LXC — the immich-server
-    # container (runs as root in its own image, i.e. LXC-root) then gets
-    # EACCES trying to write to /data. Chowning to the mapped root here makes
-    # it appear as root:root from inside the LXC, where Docker can write.
-    - name: Own the immich-photos dataset by the immich LXC's mapped root uid/gid
+    # Every LXC mounting these datasets is unprivileged (immich 104 and
+    # hassium 107 read-write, backup 105 read-only): its root (uid/gid 0) maps
+    # to host uid/gid 100000 (default Proxmox range, /etc/subuid|subgid
+    # "root:100000:65536"). Bind-mounted as-is, a dataset is owned by host root
+    # (0:0), which shows up as nobody:nogroup inside the LXC — the immich-server
+    # container (runs as root in its own image, i.e. LXC-root) then got EACCES
+    # writing to /data. Chowning to the mapped root makes it appear as
+    # root:root from inside every LXC, where Docker can write.
+    - name: Own each dataset by the LXCs' mapped root uid/gid
       ansible.builtin.file:
-        path: "/{{ immich_photos_dataset }}"
+        path: "/{{ item }}"
         owner: "100000"
         group: "100000"
         state: directory
         # Explicit, and equal to the mode measured on gallium (755) on
-        # 2026-10-18 — stating it changes nothing on the live system.
+        # 2026-10-18 for immich-photos — stating it changes nothing there.
         mode: "0755"
+      loop: "{{ proxmox_datasets }}"
 
 # ZFS maintenance itself (sanoid config incl. the photos template) runs below,
 # after the dataset above is guaranteed to exist.
@@ -468,10 +480,10 @@
 
 # Isolated backup LXC (105) — runs the rclone/HDD/Object-Lock jobs (Étape 4 of
 # ~/.claude/plans/backup-strategy.md). Prerequisites (must be done first):
-#   1) The "Provision ZFS dataset for Immich photos" play + the immich LXC exist
-#      (this LXC read-only bind-mounts that dataset).
+#   1) The "Provision ZFS datasets" play + the immich and hassium LXCs exist
+#      (this LXC read-only bind-mounts both datasets).
 #   2) The external HDD is mounted host-side on /mnt/hdd-external (Étape 0-bis).
-#   3) `terraform apply` created LXC 105 with its two bind-mounts. The scoped
+#   3) `terraform apply` created LXC 105 with its three bind-mounts. The scoped
 #      Terraform token can't post bind-mounts (403 root@pam) — post them once on
 #      the Proxmox root console, see terraform/backup.tf.
 #

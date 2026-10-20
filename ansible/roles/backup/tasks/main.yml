@@ -65,6 +65,13 @@
   failed_when: photos_mnt.rc != 0 or 'ro' not in photos_mnt.stdout.split(',')
   # rc != 0 → not mounted (missing bind-mount); 'ro' absent → not read-only.
 
+# Same contract for Home Assistant's backups: present, and read-only.
+- name: Assert the hassium-backups mount is present and read-only
+  ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_hassium_src }}
+  register: backup_hassium_mnt
+  changed_when: false
+  failed_when: backup_hassium_mnt.rc != 0 or 'ro' not in backup_hassium_mnt.stdout.split(',')
+
 - name: Assert the HDD bind-mount is actually mounted (not an empty dir)
   ansible.builtin.command: mountpoint -q {{ backup_hdd_mount }}
   changed_when: false

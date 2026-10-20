@@ -132,17 +132,52 @@ namespace. That is also why the trusted proxy (set in the UI, see below) is
 
 ## Backups — read this before trusting them
 
-The LXC is listed in `pbs_backup_vmids`, so PBS snapshots it nightly at 02:30.
-**That is not sufficient on its own.** A `mode: snapshot` run copies the
-recorder SQLite database while HA is writing to it; WAL usually replays cleanly
-on restore, but that is a likelihood and not a guarantee.
+The LXC is listed in `pbs_backup_vmids`, so PBS snapshots its rootfs nightly
+at 02:30. **That is not sufficient on its own.** A `mode: snapshot` run copies
+the recorder SQLite database while HA is writing to it; WAL usually replays
+cleanly on restore, but that is a likelihood and not a guarantee. And PBS
+stays on gallium's NVMe: it does not survive the NUC.
 
 The application-consistent layer is Home Assistant's own scheduled backup,
-which must be enabled **once, manually**, in Settings → System → Backups. Its
-tarballs are written to the LXC rootfs and are therefore swept up by the same
-PBS run, giving a consistent restore point inside a crash-consistent image.
+enabled **once, manually**, in Settings → System → Backups: daily at 01:30,
+database included, 7 kept, location *This system*, encrypted. HA writes it
+to `/config/backups`, which is not the rootfs but the
+`rpool/data/hassium-backups` ZFS dataset — the Immich photos pattern:
 
-Until that is done, the only copy is the crash-consistent snapshot.
+- bind-mounted read-write here (`terraform/hassium.tf`, mounted over
+  `/config/backups` by `docker-compose.yml.j2`), so the archives survive a
+  rebuild of this LXC;
+- snapshotted by sanoid, like every dataset under `rpool/data`;
+- bind-mounted **read-only** into the backup LXC (105), which copies it
+  nightly to Scaleway (`hassium-backups/`, Object Lock and lifecycle 90 days)
+  and to the external HDD. That job fails — Kuma down, mail — when no
+  archive is younger than 25 hours, so a backup schedule that silently stops
+  does not go unnoticed. See `docs/backup.md`.
+
+**The encryption key is the one thing that cannot be recreated.** Without the
+emergency kit (LastPass), every off-site copy is unreadable.
+
+To restore, onboarding offers *restore from backup*: upload a `.tar`, enter
+the key. Supported on Container since 2025.1 — not yet exercised here.
+
+### One-time setup of the backups dataset
+
+The scoped Terraform token cannot create bind-mounts (API 403, root@pam
+only), so the two mounts are posted by hand, as for the photos:
+
+```bash
+ansible-playbook playbook.yml --limit proxmox   # creates the dataset
+# on the Proxmox root console:
+pct set 107 -mp0 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,backup=0
+pct set 105 -mp2 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,ro=1,backup=0
+pct reboot 107 && pct reboot 105
+terraform plan                                  # expect no diff on either mount
+ansible-playbook playbook.yml --limit adguard,hassium,backup
+```
+
+The `home-assistant` role refuses to deploy while the mount is missing:
+Docker would otherwise create an empty directory on the rootfs, and the
+archives would land outside the dataset that leaves the house.
 
 `recorder.purge_keep_days` is set to 14 explicitly. Long-term statistics — the
 hourly aggregates behind the Energy dashboard — live in a separate table that
@@ -236,6 +271,9 @@ ansible-playbook playbook.yml --limit adguard,hassium
 
 The certificate play runs *on* AdGuard and pushes to this host, so `adguard`
 must stay in scope — `--limit hassium` alone silently skips it.
+
+On a fresh LXC, the backups bind-mount must exist before the `hassium`
+play — see [One-time setup of the backups dataset](#one-time-setup-of-the-backups-dataset).
 
 Caddy is enabled but not started by the role: it refuses to start while
 `/etc/caddy/cert/*.pem` are absent. The `home-assistant-cert` role's deploy
