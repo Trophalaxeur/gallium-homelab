@@ -163,6 +163,56 @@ Three paths, all of them independent of the install type because they are HTTP:
   development is mostly dependency upkeep. The Arch AUR package lags; prefer
   PyPI.
 
+### ha-mcp — the path Claude Code uses
+
+The core MCP Server cannot remove an integration or read a device's live
+configuration, so Claude Code goes through
+[ha-mcp](https://github.com/homeassistant-ai/ha-mcp) instead: a community MCP
+server with admin reach (integrations, automations, registries, live states).
+It runs as a sidecar container in this LXC's compose, pinned by version and
+digest in `group_vars` (`ha_mcp_version`, `ha_mcp_image_digest`).
+
+```
+Claude Code ──HTTPS──▶ Caddy :443 ──/<secret>*──▶ 127.0.0.1:8086 ha-mcp
+                              └──── anything else ──▶ 127.0.0.1:8123 HA
+ha-mcp ──HTTPS https://hassium.flefevre.fr──▶ Caddy ──▶ HA
+```
+
+- **The secret path is the only credential.** `ha-mcp-web` has no other auth:
+  whoever knows `https://hassium.flefevre.fr/<secret>` drives HA as an admin.
+  It is published on loopback only; Caddy, over TLS, is the only way in.
+- **ha-mcp reaches HA through Caddy, never `127.0.0.1:8123`** — see
+  [IP ban](#ip-ban--measured-behaviour): a stale token from `127.0.0.1` would
+  ban Caddy and lock everyone out. Through Caddy, a ban hits only the sidecar's
+  bridge IP. The LXC does not resolve `hassium.flefevre.fr` (Livebox DNS), so
+  the compose pins it with `extra_hosts`.
+- **No Caddy access log**: it would write the secret path to disk.
+
+Prerequisites, once:
+
+1. A dedicated Home Assistant user `claude` — Administrator, *local network
+   only* — and a long-lived token created from its own profile (Security tab).
+   Never your own login: revoking it must not lock you out.
+2. Two vault entries (`ansible-vault edit group_vars/all/vault.yml`):
+   `vault_ha_mcp_ha_token` (that token) and `vault_ha_mcp_secret_path`
+   (`openssl rand -hex 24`, no leading slash).
+
+Registering the client on thallium, after the deploy:
+
+```bash
+read -s "HA_MCP_PATH?Secret path: "
+claude mcp add --transport http --scope user home-assistant \
+  "https://hassium.flefevre.fr/$HA_MCP_PATH"
+unset HA_MCP_PATH
+```
+
+Appending `/readonly` to the URL gives a connection where write tools are
+hidden and blocked — same secret, restricted mode.
+
+Rotation: change `vault_ha_mcp_secret_path` and redeploy (Caddy and ha-mcp pick
+it up together), then re-run `claude mcp add`. For the HA side, delete the
+token in the `claude` user's profile, or deactivate the user.
+
 What differs with Container is file access: `/config` is a plain directory on
 the LXC, readable and editable over SSH — but the Git-owned files are
 overwritten by the next deploy from `hassium-automation`. On HA OS the same

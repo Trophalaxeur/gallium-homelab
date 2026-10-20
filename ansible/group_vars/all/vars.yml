@@ -87,8 +87,9 @@ uptime_kuma_version: "1.23.16"
 # Container rather than HA OS: docs/home-assistant.md.
 hassium_ip: "192.168.1.66"
 # Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
-# acme-on-adguard pattern as immich/uptime. Also the base URL for the MCP
-# endpoint Claude Code connects to (/api/mcp). Matches the LXC hostname
+# acme-on-adguard pattern as immich/uptime. Also the base URL of the ha-mcp
+# endpoint Claude Code connects to (/<vault_ha_mcp_secret_path>, routed by
+# Caddy to the ha-mcp sidecar — docs/home-assistant.md). Matches the LXC hostname
 # `hassium` (Hs, 108 — it contains "hass", Home Assistant's original name, still
 # its binary's): hassium.lan / hassium.flefevre.fr, the standard
 # <hostname>.lan / <hostname>.flefevre.fr pair of the CLAUDE.md checklist.
@@ -113,3 +114,10 @@ homeassistant_version: "2026.10.2"
 #     ghcr.io/home-assistant/home-assistant:<ver>
 # and copy the sha256:... part. A tag can be re-pushed; a digest cannot.
 homeassistant_image_digest: "sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba6a3a546eb05fc71e89f4"
+# ha-mcp (homeassistant-ai/ha-mcp), the MCP server sidecar Claude Code drives
+# Home Assistant through. Pinned the same way as HA: version AND multi-arch index
+# digest. Check https://github.com/homeassistant-ai/ha-mcp/releases before
+# bumping, then refresh the digest with the same docker pull/inspect recipe
+# against ghcr.io/homeassistant-ai/ha-mcp:<ver>.
+ha_mcp_version: "8.7.0"
+ha_mcp_image_digest: "sha256:600677bbd7574dfb59682e40d6945f73fcc8852d3684b3671506602473942448"

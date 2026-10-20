@@ -43,6 +43,16 @@
     group: root
     mode: "0644"
 
+# No handler: `docker compose up -d` below recreates ha-mcp when this changes.
+- name: Deploy ha-mcp env file
+  ansible.builtin.template:
+    src: ha-mcp.env.j2
+    dest: "{{ homeassistant_install_dir }}/ha-mcp.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true   # renders vault_ha_mcp_ha_token and vault_ha_mcp_secret_path
+
 # Pulled BEFORE the config is touched: the validation step below runs
 # check_config inside this exact image, so a version bump is validated against
 # the schema of the version about to run, not the one currently running.
@@ -254,6 +264,7 @@
     group: caddy
     mode: "0640"
   notify: Reload caddy
+  no_log: true   # renders vault_ha_mcp_secret_path (ha-mcp route)
 
 # Enabled so it comes up on boot; NOT started here — Caddy refuses to start
 # while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).

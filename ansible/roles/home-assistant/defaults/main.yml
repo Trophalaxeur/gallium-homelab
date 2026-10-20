@@ -22,3 +22,6 @@ homeassistant_config_files:
 # so the running container and the check_config validation can never use two
 # different images.
 homeassistant_image: "ghcr.io/home-assistant/home-assistant:{{ homeassistant_version }}@{{ homeassistant_image_digest }}"
+# ha-mcp sidecar: published on 127.0.0.1 only, Caddy is its sole entry point.
+ha_mcp_port: 8086
+ha_mcp_image: "ghcr.io/homeassistant-ai/ha-mcp:{{ ha_mcp_version }}@{{ ha_mcp_image_digest }}"
