@@ -1,6 +1,6 @@
 http:
   address: 0.0.0.0:3000
-  session_ttl: 720h
+  session_ttl: 30d
 
 users:
   - name: "{{ adguard_admin_user }}"
@@ -40,12 +40,12 @@ tls:
   private_key_path: "/opt/AdGuardHome/cert/key.pem"
 
 querylog:
-  interval: 2160h
+  interval: 90d
   enabled: true
   file_enabled: true
 
 statistics:
-  interval: 24h
+  interval: 1d
   enabled: true
 
 filters:
