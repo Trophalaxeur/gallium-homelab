@@ -87,11 +87,21 @@ uptime_kuma_version: "1.23.16"
 # 2026-10-18: every phase-1 device speaks IP (Thermor Allure 4 via the Overkiz
 # cloud integration, Shelly over local Wi-Fi, inverter and wallbox on the LAN),
 # so nothing needs the Supervisor, an app, or Matter/Thread.
-homeassistant_ip: "192.168.1.66"
+hassium_ip: "192.168.1.66"
 # Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
 # acme-on-adguard pattern as immich/uptime. Also the base URL for the MCP
-# endpoint Claude Code connects to (/api/mcp).
-homeassistant_domain: "homeassistant.flefevre.fr"
+# endpoint Claude Code connects to (/api/mcp). Matches the LXC hostname
+# `hassium` (Hs, 108 — it contains "hass", Home Assistant's original name, still
+# its binary's): hassium.lan / hassium.flefevre.fr, the standard
+# <hostname>.lan / <hostname>.flefevre.fr pair of the CLAUDE.md checklist.
+homeassistant_domain: "hassium.flefevre.fr"
+# PRIVATE repo whose root IS Home Assistant's /config (configuration.yaml,
+# automations…): it describes how the home is used, and this repo is public
+# (PR #25 review). Install-type agnostic — HA OS would consume the same repo
+# through the Git pull app. Resolved on the CONTROL node, relative to ansible/:
+# both repos side by side under the same parent. The role fails if it is
+# missing, and if its internal_url disagrees with homeassistant_domain above.
+homeassistant_config_repo_dir: "{{ playbook_dir }}/../../hassium-automation"
 # Pinned (never :latest / :stable). HA ships a feature release every month;
 # check https://github.com/home-assistant/core/releases before bumping.
 # ⚠️ Recorder schema migrations are one-way — there is no downgrade once HA has

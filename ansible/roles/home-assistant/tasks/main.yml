@@ -7,7 +7,8 @@
 # speaks IP — Thermor Allure 4 via the Overkiz cloud integration, Shelly over
 # local Wi-Fi, the inverter and the wallbox over the LAN. None of them needs
 # the Supervisor, an app or Matter/Thread. In exchange we keep the repo's
-# pattern: pinned versions, Ansible-templated config, PBS, and direct
+# pattern: pinned versions, Git-owned config (private hassium-automation
+# repo, validated before install), PBS, and direct
 # filesystem access to /config from the terminal.
 
 # Docker packaged in Debian trixie — no extra APT repo, same as immich/uptime.
@@ -58,38 +59,76 @@
     chdir: "{{ homeassistant_install_dir }}"
   changed_when: false
 
-# --- Git-owned config: render → validate → swap in --------------------------
-# Ansible owns configuration.yaml and automations-managed.yaml. It does NOT own
-# .storage/ (integrations, entity registry, dashboards) — that is HA's internal
-# JSON, UI-only on every install type.
+# --- Private config: copy → validate → swap in -------------------------------
+# Home Assistant's configuration lives in the PRIVATE repo
+# hassium-automation, whose root IS a Home Assistant /config (PR #25
+# review: it describes how the home is used, and this repo is public). The same
+# files would serve HA OS through the Git pull app, so they are plain Home
+# Assistant YAML. Ansible writes only the files in homeassistant_config_files; it
+# never touches .storage/ (integrations, entity registry, dashboards) — HA's
+# internal JSON, UI-only on every install type.
 #
-# The templates are NOT rendered straight into config/. A YAML syntax error in
-# either file stops configuration.yaml from loading and HA boots into recovery
-# mode — every integration and automation stopped — while a plain
-# template + restart would still report the play green. So both files are
-# rendered into a staging directory, validated there, and copied into config/
-# only once check_config passes. A rejected change never reaches HA.
+# Nothing goes straight into config/. A YAML syntax error stops
+# configuration.yaml from loading and HA boots into recovery mode — every
+# integration and automation stopped — while a plain copy + restart would still
+# report the play green. So the files land in a staging directory, are validated
+# there, and reach config/ only once check_config passes.
 - name: Create the config staging directory
   ansible.builtin.file:
     path: "{{ homeassistant_staging_dir }}"
     state: directory
     mode: "0750"
 
-- name: Render configuration.yaml into staging
-  ansible.builtin.template:
-    src: configuration.yaml.j2
-    dest: "{{ homeassistant_staging_dir }}/configuration.yaml"
-    owner: root
-    group: root
-    mode: "0644"
+# Refuse to go on without the config repo. Deploying without it would be
+# "successful" — and would replace the live configuration with nothing.
+- name: Check the config repo files on the control node
+  ansible.builtin.stat:
+    path: "{{ homeassistant_config_repo_dir }}/{{ item }}"
+  loop: "{{ homeassistant_config_files }}"
+  delegate_to: localhost
+  become: false
+  register: ha_config_repo_files
 
-- name: Render the Git-owned automations into staging
-  ansible.builtin.template:
-    src: automations-managed.yaml.j2
-    dest: "{{ homeassistant_staging_dir }}/automations-managed.yaml"
+- name: Require the private config repo
+  ansible.builtin.assert:
+    that: ha_config_repo_files.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      Missing in {{ homeassistant_config_repo_dir }}:
+      {{ ha_config_repo_files.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}.
+      Clone hassium-automation next to gallium-homelab (see its README) —
+      the play stops rather than deploy an empty configuration over the live one.
+    quiet: true
+
+# The domain lives in two places by design: homeassistant_domain in group_vars
+# (Caddy, certificate, DNS rewrite) and internal_url in the private
+# configuration.yaml, which must stay plain YAML for HA OS. Catch drift here
+# rather than ship links to a name nothing serves. from_yaml cannot parse HA's
+# custom tags (!include, !secret...), so they are neutralised before parsing.
+- name: Require internal_url to match homeassistant_domain
+  ansible.builtin.assert:
+    that: >-
+      ((lookup('ansible.builtin.file', homeassistant_config_repo_dir ~ '/configuration.yaml')
+      | regex_replace(' ![a-z_]+ ', ' ') | from_yaml).get('homeassistant', {}).get('internal_url', '')
+      | regex_replace('/$', '')) == 'https://' ~ homeassistant_domain
+    fail_msg: >-
+      internal_url in {{ homeassistant_config_repo_dir }}/configuration.yaml does
+      not match https://{{ homeassistant_domain }} (homeassistant_domain in
+      group_vars). Fix one of the two.
+    quiet: true
+
+# COPY, never template: the files carry Home Assistant's own Jinja
+# ({{ trigger.to_state.state }}, {{ states(...) }}). Through
+# ansible.builtin.template, Ansible would render them itself and fail on
+# "'trigger' is undefined" (measured). copy ships them byte for byte.
+# 0600: private content, read by HA as root.
+- name: Copy the private config into staging
+  ansible.builtin.copy:
+    src: "{{ homeassistant_config_repo_dir }}/{{ item }}"
+    dest: "{{ homeassistant_staging_dir }}/{{ item }}"
     owner: root
     group: root
-    mode: "0644"
+    mode: "0600"
+  loop: "{{ homeassistant_config_files }}"
 
 # Measured against this exact image (2026.10.2), three cases:
 #   - valid config                    → rc=0, no "ERROR:" line
@@ -116,24 +155,15 @@
     or (ha_check_config.stdout_lines + ha_check_config.stderr_lines)
     | select('match', '^ERROR:') | list | length > 0
 
-- name: Install the validated configuration.yaml
+- name: Install the validated config
   ansible.builtin.copy:
-    src: "{{ homeassistant_staging_dir }}/configuration.yaml"
-    dest: "{{ homeassistant_install_dir }}/config/configuration.yaml"
+    src: "{{ homeassistant_staging_dir }}/{{ item }}"
+    dest: "{{ homeassistant_install_dir }}/config/{{ item }}"
     remote_src: true
     owner: root
     group: root
-    mode: "0644"
-  notify: Restart home assistant
-
-- name: Install the validated Git-owned automations
-  ansible.builtin.copy:
-    src: "{{ homeassistant_staging_dir }}/automations-managed.yaml"
-    dest: "{{ homeassistant_install_dir }}/config/automations-managed.yaml"
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0644"
+    mode: "0600"
+  loop: "{{ homeassistant_config_files }}"
   notify: Restart home assistant
 
 - name: Start Home Assistant
@@ -205,15 +235,15 @@
     state: present
 
 # Public half of the keypair generated on adguard (playbook.yml adguard play).
-# Skipped when adguard isn't in scope — run `--limit adguard,homeassistant`.
+# Skipped when adguard isn't in scope — run `--limit adguard,hassium`.
 - name: Authorize the deploy key for certdeploy (source-restricted)
   ansible.posix.authorized_key:
     user: certdeploy
     state: present
-    key: "{{ hostvars[groups['adguard'][0]]['homeassistant_cert_deploy_pubkey'] }}"
+    key: "{{ hostvars[groups['adguard'][0]]['hassium_cert_deploy_pubkey'] }}"
     key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
     exclusive: true
-  when: hostvars[groups['adguard'][0]]['homeassistant_cert_deploy_pubkey'] is defined
+  when: hostvars[groups['adguard'][0]]['hassium_cert_deploy_pubkey'] is defined
 
 - name: Grant certdeploy a one-command sudoers rule (restart Caddy only)
   ansible.builtin.copy:

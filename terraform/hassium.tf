@@ -1,17 +1,17 @@
-resource "proxmox_virtual_environment_container" "homeassistant" {
+resource "proxmox_virtual_environment_container" "hassium" {
   description  = "Home Assistant — domotique (HA Container + Caddy, Docker Compose)"
   node_name    = var.proxmox_node
-  vm_id        = var.homeassistant_vmid
+  vm_id        = var.hassium_vmid
   started      = true
   unprivileged = true
   tags         = ["home-assistant", "domotique", "homelab"]
 
   initialization {
-    hostname = "homeassistant"
+    hostname = "hassium"
 
     ip_config {
       ipv4 {
-        address = "${var.homeassistant_ip}/24"
+        address = "${var.hassium_ip}/24"
         gateway = var.gateway
       }
     }
@@ -23,7 +23,7 @@ resource "proxmox_virtual_environment_container" "homeassistant" {
   }
 
   operating_system {
-    template_file_id = var.homeassistant_lxc_template
+    template_file_id = var.hassium_lxc_template
     type             = "debian"
   }
 
@@ -74,6 +74,6 @@ resource "proxmox_virtual_environment_container" "homeassistant" {
   }
 }
 
-output "homeassistant_ip" {
-  value = var.homeassistant_ip
+output "hassium_ip" {
+  value = var.hassium_ip
 }

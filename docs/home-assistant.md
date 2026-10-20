@@ -3,8 +3,8 @@ title: "Home Assistant — home automation"
 description: "LXC 107 running Home Assistant Container (no Supervisor) behind Caddy, why the Container install type was chosen over HA OS on a Proxmox homelab, and the ownership split between Git and the Home Assistant UI."
 ---
 
-Home Assistant runs in LXC 107 (`homeassistant.lan` / `192.168.1.66`), served over
-TLS at `homeassistant.flefevre.fr`. Same runtime shape as the rest of the
+Home Assistant runs in LXC 107 (`hassium.lan` / `192.168.1.66`), served over
+TLS at `hassium.flefevre.fr`. Same runtime shape as the rest of the
 homelab: Docker Compose inside an unprivileged LXC, Caddy in front, certificate
 issued on the AdGuard LXC and pushed over SSH.
 
@@ -55,7 +55,7 @@ piece of hardware coupling and makes that migration trivial.
 This is the part that surprises people: **most of Home Assistant's
 configuration is not YAML**, on any install type.
 
-| Owned by Git (Ansible templates) | Owned by Home Assistant |
+| Owned by Git — private config repo | Owned by Home Assistant |
 |---|---|
 | `configuration.yaml` | `/config/.storage/*.json` |
 | `automations-managed.yaml` | integrations, entity registry, areas, dashboards |
@@ -63,17 +63,49 @@ configuration is not YAML**, on any install type.
 
 Integrations are stored in `/config/.storage/core.config_entries` as internal
 JSON that must not be hand-edited. Adding Overkiz or a solar inverter is a UI
-step by design — there is nothing to template.
+step by design — there is nothing to version.
 
 The HTTP server settings went the same way in Home Assistant 2026.8: they now
-live in Settings → System → Network, and the template ships no `http:` block.
-See [Network settings](#network-settings--one-time-after-the-first-deploy).
+live in Settings → System → Network, and the configuration ships no `http:`
+block. See [Network settings](#network-settings--one-time-after-the-first-deploy).
+
+### Two repositories: how Home Assistant is installed, and what it does
+
+This repository is public and only describes **how** Home Assistant is
+installed: Terraform, Docker Compose, Caddy, certificates, the validation
+gate. **What** Home Assistant does — `configuration.yaml`, the automations —
+lives in a private repository, `hassium-automation`, because it
+describes how the home is used: presence, absences, schedules.
+
+The root of that private repository **is** Home Assistant's `/config`. That
+makes it independent of the install type:
+
+- **HA Container (current)** — clone it next to this repository. The role reads
+  it from `homeassistant_config_repo_dir` on the control node and copies only the
+  files listed in `homeassistant_config_files`.
+- **HA OS (if the install type ever changes)** — the official *Git pull* app
+  clones the same repository straight into `/config`. It has no sub-folder
+  option, which is why the configuration sits at the repository root.
+
+Guard rails in the role:
+
+- **Missing repository → the play stops.** Carrying on would look successful
+  while replacing the live configuration with nothing.
+- **`internal_url` must match `homeassistant_domain`.** The domain lives in two
+  places by design: `group_vars` (Caddy, certificate, DNS rewrite) and the
+  private `configuration.yaml`, which must stay plain YAML for HA OS. The role
+  refuses to deploy when they disagree.
+- **Copied, never templated.** Home Assistant automations carry their own Jinja
+  (`{{ trigger.to_state.state }}`, `{{ states('sensor.x') }}`). Through Ansible's
+  template engine they would be rendered by Ansible instead, and the play fails
+  on `'trigger' is undefined` (measured).
+- Files are deployed with mode `0600` and go through the `check_config` gate.
 
 Automations are Git-owned, enforced structurally rather than by convention.
 `configuration.yaml` declares a **labeled** include:
 
 ```yaml
-automation ansible: !include automations-managed.yaml
+automation git: !include automations-managed.yaml
 ```
 
 The HA UI automation editor only ever writes to an *unlabeled* `automation:`
@@ -140,11 +172,11 @@ same thing requires going through an SSH or Samba app.
 ```bash
 terraform apply
 ansible-playbook playbook.yml --limit adguard              # DNS rewrites + cert deploy keypair
-ansible-playbook playbook.yml --limit adguard,homeassistant
+ansible-playbook playbook.yml --limit adguard,hassium
 ```
 
 The certificate play runs *on* AdGuard and pushes to this host, so `adguard`
-must stay in scope — `--limit homeassistant` alone silently skips it.
+must stay in scope — `--limit hassium` alone silently skips it.
 
 Caddy is enabled but not started by the role: it refuses to start while
 `/etc/caddy/cert/*.pem` are absent. The `home-assistant-cert` role's deploy
@@ -158,11 +190,11 @@ the network settings below exist.
 Home Assistant 2026.8 moved the HTTP server settings from `configuration.yaml`
 to the UI. Measured on the pinned 2026.10.2: an `http:` block still works, but
 is imported as unconfirmed *pending* settings and raises a
-`http/deprecated_yaml` repair issue. The template therefore ships none, and
+`http/deprecated_yaml` repair issue. The configuration therefore ships none, and
 these settings are set by hand once — like onboarding or backups.
 
 On a fresh install, Home Assistant does not trust Caddy yet: every request
-through `https://homeassistant.flefevre.fr` gets **HTTP 400** (measured). Do
+through `https://hassium.flefevre.fr` gets **HTTP 400** (measured). Do
 the onboarding at `http://192.168.1.66:8123`, then the two steps below, in
 Settings → System → Network.
 
@@ -179,7 +211,7 @@ ones**. That is what makes each step below safe to try.
 | IP ban | on |
 | Login attempts threshold | `5` |
 
-Save, confirm, then check that `https://homeassistant.flefevre.fr` loads.
+Save, confirm, then check that `https://hassium.flefevre.fr` loads.
 Only `127.0.0.1` is trusted because it is Caddy's upstream: a request carrying
 `X-Forwarded-For` from an unlisted source such as `::1` gets 400 (measured).
 
@@ -206,7 +238,7 @@ token counts as a failed attempt**. Behind Caddy, the ban is keyed on the
 ### Name resolution on the LAN
 
 The Livebox hands DHCP clients `192.168.1.53` (AdGuard), then `1.1.1.1`
-(measured on thallium's wlan0 lease). `homeassistant.flefevre.fr` exists only
+(measured on thallium's wlan0 lease). `hassium.flefevre.fr` exists only
 as an AdGuard rewrite, with no public record, so a client that falls back to
 `1.1.1.1` cannot resolve it — expect occasional failures from phones. The LXCs
 themselves do not use AdGuard at all: they resolve through the Livebox.
@@ -251,7 +283,7 @@ host, not inside this LXC. After the first start, look for errors from the
 discovery integrations that `default_config` loads:
 
 ```bash
-ssh root@homeassistant.lan \
+ssh root@hassium.lan \
   'cd /opt/home-assistant && docker compose logs homeassistant' \
   | grep -E 'ERROR|WARNING' | grep -iE 'usb|bluetooth|dhcp'
 ```

@@ -172,19 +172,19 @@ variable "uptime_lxc_template" {
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
 
-variable "homeassistant_vmid" {
+variable "hassium_vmid" {
   description = "VMID du conteneur Home Assistant (domotique)"
   type        = number
   default     = 107
 }
 
-variable "homeassistant_ip" {
+variable "hassium_ip" {
   description = "IP statique du LXC Home Assistant"
   type        = string
   default     = "192.168.1.66"
 }
 
-variable "homeassistant_lxc_template" {
+variable "hassium_lxc_template" {
   description = "Template LXC pour Home Assistant (Debian 13 recommandé — seul template disponible sur gallium)"
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"

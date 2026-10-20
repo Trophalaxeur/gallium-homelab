@@ -11,6 +11,12 @@ homeassistant_timezone: "Europe/Paris"
 # copied into config/ (tasks/main.yml). Kept OUTSIDE config/ on purpose: HA must
 # never load a file that has not passed check_config.
 homeassistant_staging_dir: "{{ homeassistant_install_dir }}/config-staging"
+# Files copied from the private config repo into /config — and the ONLY files
+# Ansible ever writes there. Anything configuration.yaml includes must be
+# listed, otherwise check_config fails on the missing include (by design).
+homeassistant_config_files:
+  - configuration.yaml
+  - automations-managed.yaml
 # Full image reference, digest-pinned. Assembled from the two group_vars inputs
 # so the running container and the check_config validation can never use two
 # different images.
