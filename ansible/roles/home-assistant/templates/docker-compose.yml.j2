@@ -49,3 +49,36 @@ services:
       - ./config:/config
       # HA reads the host clock for sun elevation and scheduling.
       - /etc/localtime:/etc/localtime:ro
+
+  # MCP server Claude Code drives HA through (docs/home-assistant.md). Holds an
+  # admin token of the dedicated `claude` HA user.
+  ha-mcp:
+    image: {{ ha_mcp_image }}
+    container_name: ha-mcp
+    restart: unless-stopped
+    # The image defaults to stdio; ha-mcp-web serves Streamable HTTP.
+    command: ha-mcp-web
+    env_file: ha-mcp.env
+    # Bridge network ON PURPOSE, unlike homeassistant above: published on
+    # loopback only, so the LAN never reaches it — Caddy is its sole entry.
+    ports:
+      - "127.0.0.1:{{ ha_mcp_port }}:{{ ha_mcp_port }}"
+    # It reaches HA through Caddy (HOMEASSISTANT_URL), never 127.0.0.1:{{ homeassistant_port }}:
+    # a stale token sent from 127.0.0.1 would IP-ban 127.0.0.1 — that is,
+    # Caddy, and everyone with it. Through Caddy, HA keys the ban on this
+    # container's own bridge IP (X-Forwarded-For).
+    # The LXC resolves through the Livebox, which does not know this name (it
+    # only exists as an AdGuard rewrite), hence the static entry.
+    extra_hosts:
+      - "{{ homeassistant_domain }}:{{ hassium_ip }}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # Settings UI state (tool toggles, read-only mode). A named volume keeps
+      # the image's 999:999 ownership; a bind mount would need a manual chown.
+      - ha-mcp-data:/home/mcpuser/.ha-mcp
+
+volumes:
+  ha-mcp-data:
