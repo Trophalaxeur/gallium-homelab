@@ -1,0 +1,265 @@
+---
+# Home Assistant LXC (107) — domotique. HA Container (the Supervisor-less
+# install type) in Docker Compose inside its own LXC, same runtime pattern as
+# immich/uptime (CLAUDE.md: no service on the PVE host).
+#
+# Why Container rather than HA OS, and the trade-offs: docs/home-assistant.md.
+
+# Docker packaged in Debian trixie — no extra APT repo, same as immich/uptime.
+- name: Install Docker
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose
+    state: present
+    update_cache: true
+
+- name: Enable Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Create Home Assistant install directory
+  ansible.builtin.file:
+    path: "{{ homeassistant_install_dir }}"
+    state: directory
+    mode: "0750"
+
+# Created explicitly rather than letting Docker create it on first `up`: the
+# private config below must land here BEFORE HA's first start, otherwise HA
+# boots once on a default configuration.yaml it generates itself.
+- name: Create Home Assistant config directory
+  ansible.builtin.file:
+    path: "{{ homeassistant_install_dir }}/config"
+    state: directory
+    mode: "0750"
+
+- name: Deploy Home Assistant docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ homeassistant_install_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Pulled BEFORE the config is touched: the validation step below runs
+# check_config inside this exact image, so a version bump is validated against
+# the schema of the version about to run, not the one currently running.
+- name: Pull Home Assistant image
+  ansible.builtin.command: docker compose pull
+  args:
+    chdir: "{{ homeassistant_install_dir }}"
+  changed_when: false
+
+# --- Private config: copy → validate → swap in -------------------------------
+# Home Assistant's configuration lives in the PRIVATE repo
+# hassium-automation, whose root IS a Home Assistant /config: it describes how
+# the home is used, and this repo is public. The same files would serve HA OS
+# through the Git pull app, so they are plain Home Assistant YAML. Ansible
+# writes only the files in homeassistant_config_files; it never touches
+# .storage/ (integrations, entity registry, dashboards) — HA's internal JSON,
+# UI-only on every install type.
+#
+# Nothing goes straight into config/. A YAML syntax error stops
+# configuration.yaml from loading and HA boots into recovery mode — every
+# integration and automation stopped — while a plain copy + restart would still
+# report the play green. So the files land in a staging directory, are validated
+# there, and reach config/ only once check_config passes.
+- name: Create the config staging directory
+  ansible.builtin.file:
+    path: "{{ homeassistant_staging_dir }}"
+    state: directory
+    mode: "0750"
+
+# Refuse to go on without the config repo. Deploying without it would be
+# "successful" — and would replace the live configuration with nothing.
+- name: Check the config repo files on the control node
+  ansible.builtin.stat:
+    path: "{{ homeassistant_config_repo_dir }}/{{ item }}"
+  loop: "{{ homeassistant_config_files }}"
+  delegate_to: localhost
+  become: false
+  register: ha_config_repo_files
+
+- name: Require the private config repo
+  ansible.builtin.assert:
+    that: ha_config_repo_files.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      Missing in {{ homeassistant_config_repo_dir }}:
+      {{ ha_config_repo_files.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}.
+      Clone hassium-automation next to gallium-homelab (see its README) —
+      the play stops rather than deploy an empty configuration over the live one.
+    quiet: true
+
+# The domain lives in two places by design: homeassistant_domain in group_vars
+# (Caddy, certificate, DNS rewrite) and internal_url in the private
+# configuration.yaml, which must stay plain YAML for HA OS. Catch drift here
+# rather than ship links to a name nothing serves. from_yaml cannot parse HA's
+# custom tags (!include, !secret...), so they are neutralised before parsing.
+- name: Require internal_url to match homeassistant_domain
+  ansible.builtin.assert:
+    that: >-
+      ((lookup('ansible.builtin.file', homeassistant_config_repo_dir ~ '/configuration.yaml')
+      | regex_replace(' ![a-z_]+ ', ' ') | from_yaml).get('homeassistant', {}).get('internal_url', '')
+      | regex_replace('/$', '')) == 'https://' ~ homeassistant_domain
+    fail_msg: >-
+      internal_url in {{ homeassistant_config_repo_dir }}/configuration.yaml does
+      not match https://{{ homeassistant_domain }} (homeassistant_domain in
+      group_vars). Fix one of the two.
+    quiet: true
+
+# COPY, never template: the files carry Home Assistant's own Jinja
+# ({{ trigger.to_state.state }}, {{ states(...) }}). Through
+# ansible.builtin.template, Ansible would render them itself and fail on
+# "'trigger' is undefined" (measured). copy ships them byte for byte.
+# 0600: private content, read by HA as root.
+- name: Copy the private config into staging
+  ansible.builtin.copy:
+    src: "{{ homeassistant_config_repo_dir }}/{{ item }}"
+    dest: "{{ homeassistant_staging_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ homeassistant_config_files }}"
+
+# Measured against this exact image (2026.10.2), three cases:
+#   - valid config                    → rc=0, no "ERROR:" line
+#   - YAML syntax error               → rc=1   (the recovery-mode case)
+#   - valid YAML, invalid automation  → rc=0 but one "ERROR:" line. HA would
+#     silently disable that automation; --fail-on-warnings does not catch it
+#     and the --json report counts 0 errors.
+# Hence the double condition: the valid config produced zero "ERROR:" lines in
+# the same measurement, so failing on any of them has no false positive.
+# --network none: the check needs nothing from the network and must not reach
+# it. --entrypoint python3: the image's default /init (s6) would start HA.
+# :ro — check_config writes nothing into the directory it validates (measured).
+- name: Validate the staged config with check_config
+  ansible.builtin.command: >
+    docker run --rm --network none
+    --entrypoint python3
+    -v {{ homeassistant_staging_dir }}:/config:ro
+    {{ homeassistant_image }}
+    -m homeassistant --script check_config --config /config
+  register: ha_check_config
+  changed_when: false
+  failed_when: >
+    ha_check_config.rc != 0
+    or (ha_check_config.stdout_lines + ha_check_config.stderr_lines)
+    | select('match', '^ERROR:') | list | length > 0
+
+- name: Install the validated config
+  ansible.builtin.copy:
+    src: "{{ homeassistant_staging_dir }}/{{ item }}"
+    dest: "{{ homeassistant_install_dir }}/config/{{ item }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ homeassistant_config_files }}"
+  notify: Restart home assistant
+
+- name: Start Home Assistant
+  ansible.builtin.command: docker compose up -d
+  args:
+    chdir: "{{ homeassistant_install_dir }}"
+  register: ha_compose_up
+  # Compose v2 writes container lifecycle status to stderr; check stdout too in
+  # case a wrapper routes it differently.
+  changed_when: >
+    'Started' in (ha_compose_up.stderr + ha_compose_up.stdout)
+    or 'Created' in (ha_compose_up.stderr + ha_compose_up.stdout)
+    or 'Recreate' in (ha_compose_up.stderr + ha_compose_up.stdout)
+
+# --- TLS reverse proxy (Caddy) — same pattern as immich/uptime ---
+# Cert issued on the AdGuard LXC (acme.sh, DNS-01) and pushed to
+# /etc/caddy/cert over SSH by the `home-assistant-cert` role.
+
+- name: Create /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add Caddy signing key
+  ansible.builtin.get_url:
+    url: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+    dest: /etc/apt/keyrings/caddy-stable.asc
+    mode: "0644"
+    force: false
+
+- name: Add Caddy APT repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/caddy-stable.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/caddy-stable.asc] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
+    mode: "0644"
+
+# Installing the package creates the `caddy` user/group — created BEFORE
+# certdeploy so certdeploy's primary group can be caddy (cert files it writes
+# are then caddy-readable without a post-write chgrp).
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    state: present
+    update_cache: true
+
+- name: Create certdeploy user (target of the acme.sh ssh deploy-hook)
+  ansible.builtin.user:
+    name: certdeploy
+    system: true
+    shell: /bin/bash
+    group: caddy
+    create_home: true
+    state: present
+
+- name: Create Caddy cert directory
+  ansible.builtin.file:
+    path: /etc/caddy/cert
+    state: directory
+    owner: certdeploy
+    group: caddy
+    mode: "0750"
+
+# This Debian template doesn't ship sudo — needed for the certdeploy sudoers rule.
+- name: Install sudo
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+
+# Public half of the keypair generated on adguard (playbook.yml adguard play).
+# Skipped when adguard isn't in scope — run `--limit adguard,hassium`.
+- name: Authorize the deploy key for certdeploy (source-restricted)
+  ansible.posix.authorized_key:
+    user: certdeploy
+    state: present
+    key: "{{ hostvars[groups['adguard'][0]]['hassium_cert_deploy_pubkey'] }}"
+    key_options: 'from="{{ adguard_ip }}",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding'
+    exclusive: true
+  when: hostvars[groups['adguard'][0]]['hassium_cert_deploy_pubkey'] is defined
+
+- name: Grant certdeploy a one-command sudoers rule (restart Caddy only)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/certdeploy
+    content: |
+      certdeploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart caddy
+    mode: "0440"
+    validate: visudo -cf %s
+
+- name: Deploy Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: caddy
+    mode: "0640"
+  notify: Reload caddy
+
+# Enabled so it comes up on boot; NOT started here — Caddy refuses to start
+# while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).
+# The home-assistant-cert role's ssh deploy-hook runs `systemctl restart caddy`
+# right after landing the cert, which starts it the first time.
+- name: Enable Caddy service
+  ansible.builtin.systemd:
+    name: caddy
+    enabled: true

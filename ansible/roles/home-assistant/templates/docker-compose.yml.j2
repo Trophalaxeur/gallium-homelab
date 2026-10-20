@@ -1,0 +1,51 @@
+# Managed by Ansible (home-assistant role). Home Assistant Container — the
+# Supervisor-less install type, so there is no app store: every companion
+# service (Mosquitto + Zigbee2MQTT in phase 2, evcc in phase 3) is added here
+# as its own service. Image pinned by version AND digest (homeassistant_image,
+# role defaults, built from group_vars) — never :latest or :stable.
+#
+# Compared with the official compose (home-assistant.io/installation/linux),
+# checked 2026-10-19 — two keys are left out ON PURPOSE:
+#   - privileged: true — present in the official examples, but never listed as
+#     a prerequisite (those only require Docker Engine >= 23). It grants every
+#     host device and every capability; the doc's own "Exposing devices"
+#     section gives the targeted alternative (a `devices:` mapping), used when a
+#     device is actually needed.
+#   - /run/dbus:/run/dbus:ro — "optional but required if you plan to use the
+#     Bluetooth integration". This LXC has no Bluetooth adapter (the AX211 sits
+#     on gallium); Bluetooth goes through an ESPHome proxy instead.
+#
+# ⚠️ Do NOT add a non-root `user:` to "harden" this service. HA core
+# (helpers/system_info.py, 2026.10.2) only classifies an install as
+# "Home Assistant Container" when `user == "root" and is_official_image()`;
+# anything else is reported as "Unsupported Third Party Container".
+services:
+  homeassistant:
+    image: {{ homeassistant_image }}
+    container_name: homeassistant
+    restart: unless-stopped
+    # From the official compose. Docker's default is 10 s before SIGKILL, and
+    # HA "can need longer than that to close its database" — the next start
+    # then warns that the recorder SQLite DB was not shut down cleanly.
+    # Measured to hold end to end: `docker compose restart` (the role's handler)
+    # waits the full period with compose 2.26.1, the version Debian trixie ships;
+    # on a reboot the outer timeouts are all longer — Proxmox stopall 180 s >=
+    # docker.service TimeoutStopSec 90 s >= dockerd's longest container timeout
+    # + 5 s (moby 26.1.5) = 65 s. It is an upper bound, not a delay.
+    # Applied at container creation: changing it makes `docker compose up -d`
+    # recreate the container.
+    stop_grace_period: 60s
+    # Mandatory, not a convenience: HA discovers devices through mDNS/SSDP
+    # broadcasts, and Shelly gen1 devices push CoIoT to UDP 5683 — neither
+    # crosses a Docker bridge network. Consequence: no `ports:` mapping is
+    # possible here, HA binds {{ homeassistant_port }} on the LXC directly.
+    network_mode: host
+    environment:
+      TZ: "{{ homeassistant_timezone }}"
+    volumes:
+      # Config, the .storage JSON (integrations, entity registry) and the
+      # recorder SQLite DB. Lives on the LXC rootfs → swept into PBS with the
+      # container, provided this LXC's vmid is in pbs_backup_vmids.
+      - ./config:/config
+      # HA reads the host clock for sun elevation and scheduling.
+      - /etc/localtime:/etc/localtime:ro

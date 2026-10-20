@@ -1,0 +1,26 @@
+# This file contains ignores rule violations for ansible-lint
+ansible/roles/adguard-home/handlers/main.yml fqcn[action-core]
+ansible/roles/adguard-home/handlers/main.yml name[casing]
+ansible/roles/adguard-home/tasks/main.yml command-instead-of-shell
+ansible/roles/adguard-home/tasks/main.yml fqcn[action-core]
+ansible/roles/backup/tasks/main.yml fqcn[action-core]
+ansible/roles/backup/tasks/main.yml var-naming[no-role-prefix]
+ansible/roles/immich-cert/tasks/main.yml fqcn[action-core]
+ansible/roles/immich/handlers/main.yml fqcn[action-core]
+ansible/roles/neon-agent/handlers/main.yml fqcn[action-core]
+ansible/roles/neon-agent/handlers/main.yml name[casing]
+ansible/roles/neon-agent/tasks/main.yml fqcn[action-core]
+ansible/roles/neon-agent/tasks/main.yml name[missing]
+ansible/roles/neon-agent/tasks/phase1.yml fqcn[action-core]
+ansible/roles/neon-agent/tasks/phase1.yml fqcn[action]
+ansible/roles/neon-agent/tasks/phase1.yml latest[git]
+ansible/roles/neon-agent/tasks/phase1.yml partial-become[task]
+ansible/roles/neon-agent/tasks/phase2.yml fqcn[action-core]
+ansible/roles/neon-agent/tasks/phase2.yml no-changed-when
+ansible/roles/neon-agent/tasks/phase2.yml partial-become[task]
+ansible/roles/neon-agent/tasks/phase2.yml risky-shell-pipe
+ansible/roles/pbs/tasks/main.yml no-changed-when
+ansible/roles/pbs/tasks/main.yml no-handler
+ansible/roles/uptime-cert/tasks/main.yml fqcn[action-core]
+ansible/roles/uptime-kuma/handlers/main.yml fqcn[action-core]
+ansible/roles/zfs-maintenance/handlers/main.yml name[casing]

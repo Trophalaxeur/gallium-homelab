@@ -81,3 +81,35 @@ uptime_domain: "uptime.flefevre.fr"
 # Pinned (never :latest). Stable v1 line — verify the latest patch tag on
 # https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping.
 uptime_kuma_version: "1.23.16"
+
+# --- home assistant (domotique) ---
+# LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — why
+# Container rather than HA OS: docs/home-assistant.md.
+hassium_ip: "192.168.1.66"
+# Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
+# acme-on-adguard pattern as immich/uptime. Also the base URL for the MCP
+# endpoint Claude Code connects to (/api/mcp). Matches the LXC hostname
+# `hassium` (Hs, 108 — it contains "hass", Home Assistant's original name, still
+# its binary's): hassium.lan / hassium.flefevre.fr, the standard
+# <hostname>.lan / <hostname>.flefevre.fr pair of the CLAUDE.md checklist.
+homeassistant_domain: "hassium.flefevre.fr"
+# PRIVATE repo whose root IS Home Assistant's /config (configuration.yaml,
+# automations…): it describes how the home is used, and this repo is public.
+# Install-type agnostic — HA OS would consume the same repo
+# through the Git pull app. Resolved on the CONTROL node, relative to ansible/:
+# both repos side by side under the same parent. The role fails if it is
+# missing, and if its internal_url disagrees with homeassistant_domain above.
+homeassistant_config_repo_dir: "{{ playbook_dir }}/../../hassium-automation"
+# Pinned (never :latest / :stable). HA ships a feature release every month;
+# check https://github.com/home-assistant/core/releases before bumping.
+# ⚠️ Recorder schema migrations are one-way — there is no downgrade once HA has
+# started on a newer version. Take a PBS snapshot before a major bump.
+homeassistant_version: "2026.10.2"
+# Digest of the multi-arch INDEX for that tag (content-type
+# application/vnd.oci.image.index.v1+json — not a per-platform manifest, so the
+# same value works on any architecture). Bump it together with the version:
+#   docker pull ghcr.io/home-assistant/home-assistant:<ver>
+#   docker inspect --format '{{index .RepoDigests 0}}' \
+#     ghcr.io/home-assistant/home-assistant:<ver>
+# and copy the sha256:... part. A tag can be re-pushed; a digest cannot.
+homeassistant_image_digest: "sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba6a3a546eb05fc71e89f4"

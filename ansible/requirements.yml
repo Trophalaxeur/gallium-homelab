@@ -5,3 +5,9 @@
 collections:
   - name: ansible.posix
     version: ">=1.5.0"
+  # Provides community.general.npm, used by roles/neon-agent (phase1.yml,
+  # "Install Claude Code"). It was missing here and only ever resolved because
+  # the fat `ansible` package bundles it — a bare ansible-core install, like the
+  # one in CI, failed with "couldn't resolve module/action 'npm'".
+  - name: community.general
+    version: ">=8.0.0"

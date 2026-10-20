@@ -115,6 +115,14 @@ filtering:
     - domain: uptime.flefevre.fr
       answer: "{{ uptime_ip }}"
       enabled: true
+    - domain: hassium.lan
+      answer: "{{ hassium_ip }}"
+      enabled: true
+    # Via the variable rather than a literal: Caddy and the cert role read the
+    # same homeassistant_domain, so the three can never disagree.
+    - domain: "{{ homeassistant_domain }}"
+      answer: "{{ hassium_ip }}"
+      enabled: true
     - domain: printer.lan
       answer: "{{ printer_ip }}"
       enabled: true
