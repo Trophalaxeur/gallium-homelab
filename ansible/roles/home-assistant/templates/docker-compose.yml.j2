@@ -75,6 +75,13 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    # uvicorn's access log writes the secret path on every request; Docker's
+    # json-file default never rotates. Bound how many copies linger on disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     volumes:
       # Settings UI state (tool toggles, read-only mode). A named volume keeps
       # the image's 999:999 ownership; a bind mount would need a manual chown.
