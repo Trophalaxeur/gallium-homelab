@@ -3,13 +3,7 @@
 # install type) in Docker Compose inside its own LXC, same runtime pattern as
 # immich/uptime (CLAUDE.md: no service on the PVE host).
 #
-# Decision 2026-10-18 (Container over HA OS): every device targeted at phase 1
-# speaks IP — Thermor Allure 4 via the Overkiz cloud integration, Shelly over
-# local Wi-Fi, the inverter and the wallbox over the LAN. None of them needs
-# the Supervisor, an app or Matter/Thread. In exchange we keep the repo's
-# pattern: pinned versions, Git-owned config (private hassium-automation
-# repo, validated before install), PBS, and direct
-# filesystem access to /config from the terminal.
+# Why Container rather than HA OS, and the trade-offs: docs/home-assistant.md.
 
 # Docker packaged in Debian trixie — no extra APT repo, same as immich/uptime.
 - name: Install Docker
@@ -33,9 +27,8 @@
     mode: "0750"
 
 # Created explicitly rather than letting Docker create it on first `up`: the
-# config templates below must land here BEFORE HA's first start, otherwise HA
-# generates its own default configuration.yaml and the first playbook run
-# overwrites it on the next pass (confusing diff, two restarts).
+# private config below must land here BEFORE HA's first start, otherwise HA
+# boots once on a default configuration.yaml it generates itself.
 - name: Create Home Assistant config directory
   ansible.builtin.file:
     path: "{{ homeassistant_install_dir }}/config"
@@ -61,12 +54,12 @@
 
 # --- Private config: copy → validate → swap in -------------------------------
 # Home Assistant's configuration lives in the PRIVATE repo
-# hassium-automation, whose root IS a Home Assistant /config (PR #25
-# review: it describes how the home is used, and this repo is public). The same
-# files would serve HA OS through the Git pull app, so they are plain Home
-# Assistant YAML. Ansible writes only the files in homeassistant_config_files; it
-# never touches .storage/ (integrations, entity registry, dashboards) — HA's
-# internal JSON, UI-only on every install type.
+# hassium-automation, whose root IS a Home Assistant /config: it describes how
+# the home is used, and this repo is public. The same files would serve HA OS
+# through the Git pull app, so they are plain Home Assistant YAML. Ansible
+# writes only the files in homeassistant_config_files; it never touches
+# .storage/ (integrations, entity registry, dashboards) — HA's internal JSON,
+# UI-only on every install type.
 #
 # Nothing goes straight into config/. A YAML syntax error stops
 # configuration.yaml from loading and HA boots into recovery mode — every

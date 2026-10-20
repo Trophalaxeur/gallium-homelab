@@ -164,8 +164,9 @@ Three paths, all of them independent of the install type because they are HTTP:
   PyPI.
 
 What differs with Container is file access: `/config` is a plain directory on
-the LXC, editable over SSH or, better, templated from this repo. On HA OS the
-same thing requires going through an SSH or Samba app.
+the LXC, readable and editable over SSH — but the Git-owned files are
+overwritten by the next deploy from `hassium-automation`. On HA OS the same
+access requires going through an SSH or Samba app.
 
 ## Deploying
 

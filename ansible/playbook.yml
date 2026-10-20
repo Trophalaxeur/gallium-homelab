@@ -505,16 +505,12 @@
     - backup
 
 # Home Assistant (LXC 107) — domotique. HA Container + Caddy, Docker Compose.
-# Decision 2026-10-18: Container over HA OS — every phase-1 device speaks IP
-# (Thermor Allure 4 via the Overkiz cloud integration, Shelly over local Wi-Fi,
-# inverter and wallbox on the LAN), so nothing needs the Supervisor, an app or
-# Matter/Thread. In exchange the repo keeps pinned versions, Git-owned config
-# (private hassium-automation repo) and direct /config access from the
-# terminal.
+# Why Container rather than HA OS: docs/home-assistant.md.
 #
 # No vault vars: HA is configured through its own onboarding + UI. Integrations
-# live in /config/.storage (internal JSON, UI-only on every install type) — only
-# configuration.yaml and the Git-owned automations are templated here.
+# live in /config/.storage (internal JSON, UI-only on every install type) — the
+# only files Ansible ships are configuration.yaml and the automations, copied
+# from the private hassium-automation repo.
 #
 # Phase 2 (Mosquitto + Zigbee2MQTT, when the ZLinky/NodOn arrive) and phase 3
 # (evcc) add services to the same docker-compose.yml — no Terraform change.

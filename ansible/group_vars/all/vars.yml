@@ -83,10 +83,8 @@ uptime_domain: "uptime.flefevre.fr"
 uptime_kuma_version: "1.23.16"
 
 # --- home assistant (domotique) ---
-# LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — decision
-# 2026-10-18: every phase-1 device speaks IP (Thermor Allure 4 via the Overkiz
-# cloud integration, Shelly over local Wi-Fi, inverter and wallbox on the LAN),
-# so nothing needs the Supervisor, an app, or Matter/Thread.
+# LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — why
+# Container rather than HA OS: docs/home-assistant.md.
 hassium_ip: "192.168.1.66"
 # Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
 # acme-on-adguard pattern as immich/uptime. Also the base URL for the MCP
@@ -96,8 +94,8 @@ hassium_ip: "192.168.1.66"
 # <hostname>.lan / <hostname>.flefevre.fr pair of the CLAUDE.md checklist.
 homeassistant_domain: "hassium.flefevre.fr"
 # PRIVATE repo whose root IS Home Assistant's /config (configuration.yaml,
-# automations…): it describes how the home is used, and this repo is public
-# (PR #25 review). Install-type agnostic — HA OS would consume the same repo
+# automations…): it describes how the home is used, and this repo is public.
+# Install-type agnostic — HA OS would consume the same repo
 # through the Git pull app. Resolved on the CONTROL node, relative to ansible/:
 # both repos side by side under the same parent. The role fails if it is
 # missing, and if its internal_url disagrees with homeassistant_domain above.

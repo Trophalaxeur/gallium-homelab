@@ -1,6 +1,6 @@
 ---
 # HA only reads configuration.yaml and the automation includes at startup, so a
-# template change needs a container restart (not a reload).
+# config change needs a container restart (not a reload).
 - name: Restart home assistant
   ansible.builtin.command: docker compose restart homeassistant
   args:

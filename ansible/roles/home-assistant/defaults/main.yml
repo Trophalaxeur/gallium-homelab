@@ -1,13 +1,14 @@
 ---
 homeassistant_install_dir: /opt/home-assistant
-# Port HA listens on INSIDE the LXC. Because the container runs with
-# network_mode: host (see docker-compose.yml.j2), this port is bound on the LXC
-# itself — Caddy is the only thing fronting it, on :443.
+# Port Caddy proxies to. It does NOT configure Home Assistant: since 2026.8 the
+# server port is a UI setting (Settings → System → Network, default 8123) and
+# this value must match it. With network_mode: host (docker-compose.yml.j2)
+# HA binds it on the LXC itself — Caddy fronts it on :443.
 homeassistant_port: 8123
 # Drives HA's sun/scheduling and the recorder timestamps. Must match the
 # physical location, not the host's locale.
 homeassistant_timezone: "Europe/Paris"
-# Where the Git-owned config files are rendered and validated before being
+# Where the private config files are staged and validated before being
 # copied into config/ (tasks/main.yml). Kept OUTSIDE config/ on purpose: HA must
 # never load a file that has not passed check_config.
 homeassistant_staging_dir: "{{ homeassistant_install_dir }}/config-staging"

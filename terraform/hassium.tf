@@ -44,8 +44,8 @@ resource "proxmox_virtual_environment_container" "hassium" {
     datastore_id = var.lxc_datastore
     # rootfs + Docker images + /opt/home-assistant/config, which holds the
     # recorder SQLite DB. That DB grows with the number of entities and the
-    # retention window (recorder.purge_keep_days = 14, set explicitly in the
-    # role's configuration.yaml) — 16 Go is comfortable and resizable later.
+    # retention window (recorder.purge_keep_days, set in hassium-automation's
+    # configuration.yaml) — 16 Go is comfortable and resizable later.
     #
     # ⚠️ BACKUP CAVEAT — this LXC is in pbs_backup_vmids (playbook.yml), but a
     # PBS `mode: snapshot` run copies the recorder SQLite DB while HA is

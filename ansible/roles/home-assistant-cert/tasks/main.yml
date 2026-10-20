@@ -1,7 +1,7 @@
 ---
 # Issues the Let's Encrypt cert for {{ homeassistant_domain }}
-# (hassium.flefevre.fr) ON THE ADGUARD LXC and pushes it to the
-# hassium LXC (Home Assistant) over SSH via acme.sh's ssh deploy-hook. Same rationale as
+# (hassium.flefevre.fr) ON THE ADGUARD LXC and pushes it to the hassium LXC
+# (Home Assistant) over SSH via acme.sh's ssh deploy-hook. Same rationale as
 # immich-cert/uptime-cert: the Online.net DNS API key (controls the whole
 # flefevre.fr zone) stays on a single host, hassium never holds it.
 # acme.sh + the LE account are already installed by the adguard-home role.
