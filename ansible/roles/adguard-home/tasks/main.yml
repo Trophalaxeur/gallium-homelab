@@ -1,30 +1,30 @@
 ---
 - name: Install dependencies
-  apt:
+  ansible.builtin.apt:
     name: [curl, git, tar, socat, openssl, cron, logrotate]
     state: present
     update_cache: true
 
 - name: Create AdGuard Home directory
-  file:
+  ansible.builtin.file:
     path: /opt/AdGuardHome
     state: directory
     mode: "0755"
 
 - name: Download AdGuard Home
-  get_url:
+  ansible.builtin.get_url:
     url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
     dest: /tmp/adguard-home.tar.gz
     mode: "0644"
 
 - name: Extract AdGuard Home binary
-  unarchive:
+  ansible.builtin.unarchive:
     src: /tmp/adguard-home.tar.gz
     dest: /tmp
     remote_src: true
 
 - name: Install binary
-  copy:
+  ansible.builtin.copy:
     src: /tmp/AdGuardHome/AdGuardHome
     dest: /opt/AdGuardHome/AdGuardHome
     mode: "0755"
@@ -33,13 +33,13 @@
 # Certificates are provisioned BEFORE deploying config + starting service,
 # so AdGuard finds valid TLS material on first start (no degraded HTTP-only run).
 - name: Create cert directory
-  file:
+  ansible.builtin.file:
     path: /opt/AdGuardHome/cert
     state: directory
     mode: "0750"
 
 - name: Clone acme.sh (pinned)
-  git:
+  ansible.builtin.git:
     repo: https://github.com/acmesh-official/acme.sh.git
     dest: /tmp/acme.sh-src
     version: "3.1.3"
@@ -48,7 +48,7 @@
 # --nocron prevents acme.sh from installing its own cron entry.
 # We manage renewal scheduling explicitly via Ansible (below) for visibility.
 - name: Install acme.sh from source
-  shell: ./acme.sh --install --home /root/.acme.sh --nocron
+  ansible.builtin.command: ./acme.sh --install --home /root/.acme.sh --nocron
   args:
     chdir: /tmp/acme.sh-src
     creates: /root/.acme.sh/acme.sh
@@ -56,14 +56,14 @@
     HOME: /root
 
 - name: Register acme.sh account email
-  command: /root/.acme.sh/acme.sh --register-account -m {{ acme_email }} --server letsencrypt
+  ansible.builtin.command: /root/.acme.sh/acme.sh --register-account -m {{ acme_email }} --server letsencrypt
   environment:
     HOME: /root
   args:
     creates: /root/.acme.sh/ca/acme-v02.api.letsencrypt.org/directory/account.json
 
 - name: Issue certificate for {{ adguard_domain }}
-  command: >
+  ansible.builtin.command: >
     /root/.acme.sh/acme.sh --issue
     -d {{ adguard_domain }}
     --dns dns_online
@@ -82,18 +82,18 @@
     creates: /root/.acme.sh/{{ adguard_domain }}_ecc/{{ adguard_domain }}.cer
 
 - name: Check for an existing AdGuard configuration
-  stat:
+  ansible.builtin.stat:
     path: /opt/AdGuardHome/AdGuardHome.yaml
   register: adguard_config_stat
 
 - name: Deploy initial AdGuard configuration
-  template:
+  ansible.builtin.template:
     src: adguard-home.yaml.j2
     dest: /opt/AdGuardHome/AdGuardHome.yaml
     mode: "0600"
   when: not adguard_config_stat.stat.exists
   no_log: true   # embeds adguard_admin_password_hash
-  notify: restart adguardhome
+  notify: Restart adguardhome
 
 # AdGuard rewrites its config on startup with every default key, so the template
 # is merged into the live file and compared as data, never as text. Known limit:
@@ -104,12 +104,12 @@
   no_log: true   # embeds adguard_admin_password_hash
   block:
     - name: Read live AdGuard configuration
-      slurp:
+      ansible.builtin.slurp:
         src: /opt/AdGuardHome/AdGuardHome.yaml
       register: adguard_config_slurp
 
     - name: Compute desired AdGuard configuration
-      set_fact:
+      ansible.builtin.set_fact:
         adguard_config_live: "{{ adguard_config_live_parsed }}"
         adguard_config_desired: >-
           {{ adguard_config_live_parsed
@@ -120,22 +120,22 @@
         adguard_config_live_parsed: "{{ adguard_config_slurp.content | b64decode | from_yaml }}"
 
     - name: Deploy AdGuard configuration
-      copy:
+      ansible.builtin.copy:
         content: "{{ adguard_config_desired | to_nice_yaml(indent=2) }}"
         dest: /opt/AdGuardHome/AdGuardHome.yaml
         mode: "0600"
       when: adguard_config_desired != adguard_config_live
-      notify: restart adguardhome
+      notify: Restart adguardhome
 
 - name: Install AdGuard Home as systemd service
-  command: /opt/AdGuardHome/AdGuardHome -s install
+  ansible.builtin.command: /opt/AdGuardHome/AdGuardHome -s install
   args:
     creates: /etc/systemd/system/AdGuardHome.service
 
 # Cert install runs the reloadcmd (systemctl restart) — this is what starts
 # AdGuard for the first time, with valid cert files already in place.
 - name: Install certificate to AdGuard cert directory
-  command: >
+  ansible.builtin.command: >
     /root/.acme.sh/acme.sh --install-cert
     --ecc
     -d {{ adguard_domain }}
@@ -148,7 +148,7 @@
     creates: /opt/AdGuardHome/cert/cert.pem
 
 - name: Ensure AdGuard Home is started and enabled
-  systemd:
+  ansible.builtin.systemd:
     name: AdGuardHome
     state: started
     enabled: true
@@ -156,14 +156,14 @@
 
 # Log to /var/log so renewal failures are observable; rotated by logrotate task below.
 - name: Set up acme.sh cron for auto-renewal
-  cron:
+  ansible.builtin.cron:
     name: "acme.sh renewal"
     minute: "0"
     hour: "0"
     job: 'HOME=/root /root/.acme.sh/acme.sh --cron --home /root/.acme.sh >> /var/log/acme-renewal.log 2>&1'
 
 - name: Configure logrotate for acme.sh renewal log
-  copy:
+  ansible.builtin.copy:
     dest: /etc/logrotate.d/acme-renewal
     content: |
       /var/log/acme-renewal.log {
@@ -177,4 +177,4 @@
     mode: "0644"
 
 - name: Flush handlers
-  meta: flush_handlers
+  ansible.builtin.meta: flush_handlers
