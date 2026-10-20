@@ -186,7 +186,15 @@ ha-mcp ──HTTPS https://hassium.flefevre.fr──▶ Caddy ──▶ HA
   ban Caddy and lock everyone out. Through Caddy, a ban hits only the sidecar's
   bridge IP. The LXC does not resolve `hassium.flefevre.fr` (Livebox DNS), so
   the compose pins it with `extra_hosts`.
-- **No Caddy access log**: it would write the secret path to disk.
+- **Where the secret path lives on hassium**: `/etc/caddy/Caddyfile`,
+  `/opt/home-assistant/ha-mcp.env`, and ha-mcp's container log — uvicorn's
+  access log prints the request path on every MCP call, and `LOG_LEVEL` does not
+  govern it. All three are root-only, the same trust boundary as the HA token
+  in `ha-mcp.env`; the log is rotated (5 MB × 2). Caddy gets no access log, to
+  avoid a fourth copy.
+- **Reading ha-mcp's log**: mask on the host, before it reaches a terminal or a
+  transcript:
+  `docker logs ha-mcp 2>&1 | sed "s#$(sed -n 's#^MCP_SECRET_PATH=/##p' /opt/home-assistant/ha-mcp.env)#<SECRET>#g"`
 
 Prerequisites, once:
 
