@@ -75,18 +75,57 @@
     ONLINE_API_KEY: "{{ online_api_key }}"
   register: acme_issue
   failed_when: acme_issue.rc not in [0, 2]
-  changed_when: acme_issue.rc == 0
+  # A creates: skip returns rc=0 with changed=False — keep the module's verdict.
+  changed_when: acme_issue.changed and acme_issue.rc == 0
   no_log: true
   args:
     creates: /root/.acme.sh/{{ adguard_domain }}_ecc/{{ adguard_domain }}.cer
 
-- name: Deploy AdGuard configuration
+- name: Check for an existing AdGuard configuration
+  stat:
+    path: /opt/AdGuardHome/AdGuardHome.yaml
+  register: adguard_config_stat
+
+- name: Deploy initial AdGuard configuration
   template:
     src: adguard-home.yaml.j2
     dest: /opt/AdGuardHome/AdGuardHome.yaml
     mode: "0600"
+  when: not adguard_config_stat.stat.exists
   no_log: true   # embeds adguard_admin_password_hash
   notify: restart adguardhome
+
+# AdGuard rewrites its config on startup with every default key, so the template
+# is merged into the live file and compared as data, never as text. Known limit:
+# a scalar removed from the template stays in the live file (lists are replaced
+# whole). schema_version is owned by AdGuard once installed. See docs/adguard-config.md.
+- name: Merge AdGuard configuration into the live file
+  when: adguard_config_stat.stat.exists
+  no_log: true   # embeds adguard_admin_password_hash
+  block:
+    - name: Read live AdGuard configuration
+      slurp:
+        src: /opt/AdGuardHome/AdGuardHome.yaml
+      register: adguard_config_slurp
+
+    - name: Compute desired AdGuard configuration
+      set_fact:
+        adguard_config_live: "{{ adguard_config_live_parsed }}"
+        adguard_config_desired: >-
+          {{ adguard_config_live_parsed
+             | combine(lookup('template', 'adguard-home.yaml.j2') | from_yaml,
+                       recursive=True, list_merge='replace')
+             | combine({'schema_version': adguard_config_live_parsed.schema_version}) }}
+      vars:
+        adguard_config_live_parsed: "{{ adguard_config_slurp.content | b64decode | from_yaml }}"
+
+    - name: Deploy AdGuard configuration
+      copy:
+        content: "{{ adguard_config_desired | to_nice_yaml(indent=2) }}"
+        dest: /opt/AdGuardHome/AdGuardHome.yaml
+        mode: "0600"
+      when: adguard_config_desired != adguard_config_live
+      notify: restart adguardhome
 
 - name: Install AdGuard Home as systemd service
   command: /opt/AdGuardHome/AdGuardHome -s install

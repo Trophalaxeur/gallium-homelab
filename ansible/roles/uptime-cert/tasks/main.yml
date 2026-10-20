@@ -30,7 +30,7 @@
     ONLINE_API_KEY: "{{ online_api_key }}"
   register: acme_issue_uptime
   failed_when: acme_issue_uptime.rc not in [0, 2]
-  changed_when: acme_issue_uptime.rc == 0
+  changed_when: acme_issue_uptime.changed and acme_issue_uptime.rc == 0
   no_log: true
   args:
     creates: /root/.acme.sh/{{ uptime_domain }}_ecc/{{ uptime_domain }}.cer

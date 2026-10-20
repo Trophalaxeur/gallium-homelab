@@ -5,12 +5,37 @@ description: "DNS filtering and ad-blocking setup for the homelab network."
 
 # AdGuard Home Configuration Reference
 
+## How Ansible applies this config
+
+AdGuard Home rewrites `AdGuardHome.yaml` on every start, adding all its default keys
+(`pprof`, `doh`, `trusted_proxies`, ...). A plain `template` task would therefore always
+differ and restart AdGuard — a LAN-wide DNS blip — on every run. The `adguard-home` role
+instead:
+
+- **First install** (no file yet): writes the rendered template as-is.
+- **Afterwards**: parses the live file, merges the rendered template into it
+  (`combine(recursive=True, list_merge='replace')`), and writes + restarts **only** when the
+  merged result differs from the live file. The comparison is on parsed data, not text;
+  "nothing changed" shows as `skipping` on `Deploy AdGuard configuration`.
+
+Write durations in AdGuard's canonical notation (`30d`, `90d`, `1d` — not `720h`), otherwise
+the merge sees a difference on every run.
+
+**Known limits**
+
+- Removing a scalar or mapping key from the template does **not** remove it from the live
+  file: it keeps its last value. Set the value explicitly instead, or edit it on the host.
+- Lists are replaced as a whole, so removing a DNS rewrite or a filter does work.
+- `schema_version` belongs to AdGuard once installed: the template value (`34`) is only used
+  for the first install. After an AdGuard upgrade that migrates keys, update the template to
+  the new layout, or the merge will keep re-adding the old keys.
+
 ## Web Interface
 
 | Parameter | Value | Why |
 |---|---|---|
 | `http.address` | `0.0.0.0:3000` | Listens on all interfaces port 3000 (schema v34 unified field). Use `127.0.0.1:3000` to restrict to local only. |
-| `http.session_ttl` | `720h` | Web UI session lifetime (30 days). |
+| `http.session_ttl` | `30d` | Web UI session lifetime (30 days). |
 | `auth_attempts` | `5` | Maximum failed login attempts before blocking the IP. Lower to `3` for stricter security. |
 | `block_auth_min` | `15` | Duration in minutes an IP is blocked after exhausting auth attempts. |
 
@@ -77,10 +102,10 @@ description: "DNS filtering and ad-blocking setup for the homelab network."
 | Parameter | Value | Why |
 |---|---|---|
 | `querylog.enabled` | `true` | Logs every DNS query. Useful for diagnostics and monitoring client behavior. |
-| `querylog.interval` | `2160h` (90d) | Retention period for query logs. Reduce to `168h` (7d) if disk space is limited. |
+| `querylog.interval` | `90d` | Retention period for query logs. Reduce to `7d` if disk space is limited. |
 | `querylog.file_enabled` | `true` | Persist query log to disk (not just memory). |
 | `statistics.enabled` | `true` | Enable dashboard statistics. |
-| `statistics.interval` | `24h` | Time range displayed in the dashboard statistics. |
+| `statistics.interval` | `1d` | Time range displayed in the dashboard statistics. |
 
 ---
 
