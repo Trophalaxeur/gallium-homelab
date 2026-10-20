@@ -1,5 +1,5 @@
 ---
-- name: restart adguardhome
-  systemd:
+- name: Restart adguardhome
+  ansible.builtin.systemd:
     name: AdGuardHome
     state: restarted
