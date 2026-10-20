@@ -1,8 +1,4 @@
 # This file contains ignores rule violations for ansible-lint
-ansible/roles/adguard-home/handlers/main.yml fqcn[action-core]
-ansible/roles/adguard-home/handlers/main.yml name[casing]
-ansible/roles/adguard-home/tasks/main.yml command-instead-of-shell
-ansible/roles/adguard-home/tasks/main.yml fqcn[action-core]
 ansible/roles/backup/tasks/main.yml fqcn[action-core]
 ansible/roles/backup/tasks/main.yml var-naming[no-role-prefix]
 ansible/roles/immich-cert/tasks/main.yml fqcn[action-core]
