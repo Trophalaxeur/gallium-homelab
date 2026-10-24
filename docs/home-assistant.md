@@ -69,6 +69,21 @@ The HTTP server settings went the same way in Home Assistant 2026.8: they now
 live in Settings → System → Network, and the configuration ships no `http:`
 block. See [Network settings](#network-settings--one-time-after-the-first-deploy).
 
+### UI-side choices to redo after a rebuild without restore
+
+These live in `.storage`, so neither Git nor Ansible reproduces them. A restored
+backup brings them back. A fresh onboarding does not.
+
+| Device | Choice | Why |
+|---|---|---|
+| Brother DCP-L3520CDW | Keep the **Brother** integration, remove **IPP**, and click *Ignore* if IPP is rediscovered | Zeroconf discovers the printer twice. Brother (SNMP) exposes 39 entities — toners, per-colour drums, belt, fuser, page counters, paper and jam alerts — against 6 for IPP, with finer toner levels |
+| AirGradient ONE | *Configuration source* = `local`; *Send data to AirGradient* = off | With `cloud`, the AirGradient dashboard overwrites settings made from HA. Everything is already recorded locally |
+
+Printing itself does not involve the homelab. The printer speaks IPP Everywhere,
+so every client prints to it directly, without drivers. The CUPS on thallium is
+only that machine's local print client (one driverless queue, not shared). A
+print-server LXC would only make sense for a USB or non-driverless printer.
+
 ### Two repositories: how Home Assistant is installed, and what it does
 
 This repository is public and only describes **how** Home Assistant is
@@ -167,17 +182,26 @@ only), so the two mounts are posted by hand, as for the photos:
 
 ```bash
 ansible-playbook playbook.yml --limit proxmox   # creates the dataset
-# on the Proxmox root console:
+# on the Proxmox root console — move archives already on the rootfs:
+SRC=/rpool/data/subvol-107-disk-0/opt/home-assistant/config/backups
+cp -a $SRC/*.tar /rpool/data/hassium-backups/
+(cd $SRC && sha256sum *.tar) > /tmp/ha.sha
+(cd /rpool/data/hassium-backups && sha256sum -c /tmp/ha.sha)   # all OK first
 pct set 107 -mp0 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,backup=0
 pct set 105 -mp2 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,ro=1,backup=0
 pct reboot 107 && pct reboot 105
 terraform plan                                  # expect no diff on either mount
-ansible-playbook playbook.yml --limit adguard,hassium,backup
+ansible-playbook playbook.yml --limit hassium,backup
+# once HA lists its archives again: rm the copies left in $SRC
 ```
 
 The `home-assistant` role refuses to deploy while the mount is missing:
 Docker would otherwise create an empty directory on the rootfs, and the
 archives would land outside the dataset that leaves the house.
+
+The Scaleway lifecycle rule for `hassium-backups/` is a **bucket** change: the
+backup LXC's scoped key is denied it by design. See
+[Bucket configuration changes](backup.md#bucket-configuration-changes).
 
 `recorder.purge_keep_days` is set to 14 explicitly. Long-term statistics — the
 hourly aggregates behind the Energy dashboard — live in a separate table that
@@ -186,7 +210,9 @@ or consumption history.
 
 ## Driving it from a terminal
 
-Three paths, all of them independent of the install type because they are HTTP:
+Three generic paths, all of them independent of the install type because they
+are HTTP — plus [ha-mcp](#ha-mcp--the-path-claude-code-uses), the one actually
+in use:
 
 - **REST API** at `/api/` with a long-lived access token: `states`, `services`,
   `config/core/check_config`, `template`, `history`, `logbook`, `error_log`.
@@ -240,6 +266,22 @@ Prerequisites, once:
    `vault_ha_mcp_ha_token` (that token) and `vault_ha_mcp_secret_path`
    (`openssl rand -hex 24`, no leading slash).
 
+**Moving the token around.** Copy it from Home Assistant straight into the vault
+editor. Never park it in an editor buffer where an AI coding extension is
+active: selections and open files are sent to the model as context. This
+happened once, and the token had to be rotated. To edit the vault in VS Code,
+use a dedicated profile with no extensions and no local history:
+
+```bash
+# Profile "vault": no extensions,
+# "workbench.localHistory.enabled": false, "files.hotExit": "off"
+alias vault-edit='EDITOR="code --wait --new-window --profile vault" ansible-vault edit'
+```
+
+`--wait` is required: without it, `ansible-vault` re-encrypts the file before
+you have edited it. A default VS Code profile would keep a plaintext copy in
+*Local History*.
+
 Registering the client on thallium, after the deploy:
 
 ```bash
@@ -249,12 +291,25 @@ claude mcp add --transport http --scope user home-assistant \
 unset HA_MCP_PATH
 ```
 
-Appending `/readonly` to the URL gives a connection where write tools are
-hidden and blocked — same secret, restricted mode.
+`--transport http` names the MCP transport (Streamable HTTP), not the URL
+scheme: the connection itself is HTTPS. Appending `/readonly` to the URL gives a
+connection where write tools are hidden and blocked — same secret, restricted
+mode.
 
 Rotation: change `vault_ha_mcp_secret_path` and redeploy (Caddy and ha-mcp pick
 it up together), then re-run `claude mcp add`. For the HA side, delete the
-token in the `claude` user's profile, or deactivate the user.
+token in the `claude` user's profile, or deactivate the user. **Rotating the
+vault without redeploying** leaves the client on the new secret and hassium on
+the old one: Caddy routes the unknown path to Home Assistant, which answers 404,
+and Claude Code reports `ENDPOINT_NOT_FOUND`. To check which side is stale
+without printing either value, compare hash prefixes:
+
+```bash
+jq -r '.mcpServers["home-assistant"].url' ~/.claude.json \
+  | sed -E 's#^https?://[^/]+/##; s#/.*$##' | tr -d '\n' | sha256sum | cut -c1-12
+ssh root@hassium.lan 'sed -n "s#^MCP_SECRET_PATH=/##p" /opt/home-assistant/ha-mcp.env \
+  | tr -d "\n" | sha256sum | cut -c1-12'
+```
 
 What differs with Container is file access: `/config` is a plain directory on
 the LXC, readable and editable over SSH — but the Git-owned files are
