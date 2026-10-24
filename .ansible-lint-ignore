@@ -1,6 +1,4 @@
 # This file contains ignores rule violations for ansible-lint
-ansible/roles/backup/tasks/main.yml fqcn[action-core]
-ansible/roles/backup/tasks/main.yml var-naming[no-role-prefix]
 ansible/roles/immich-cert/tasks/main.yml fqcn[action-core]
 ansible/roles/immich/handlers/main.yml fqcn[action-core]
 ansible/roles/neon-agent/handlers/main.yml fqcn[action-core]
