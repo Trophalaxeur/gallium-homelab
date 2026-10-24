@@ -32,7 +32,7 @@ immich_admin_email: "admin@flefevre.fr"
 # (matches the LXC hostname, like adguard.lan/neon.lan/pbs.lan) — only the
 # public domain changed, decision 2026-07-07.
 immich_domain: "photos.flefevre.fr"
-immich_version: "v3.0.1"
+immich_version: "v3.3.5"
 smtp_from_immich: "immich@flefevre.fr"
 
 # --- backup ---

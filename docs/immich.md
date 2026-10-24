@@ -107,9 +107,9 @@ official Immich stack, with **every image pinned** (never `:latest`/`release`):
 | immich-server | `ghcr.io/immich-app/immich-server:${IMMICH_VERSION}` |
 | immich-machine-learning | `ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION}` |
 | database | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357…` |
-| redis | `docker.io/valkey/valkey:9@sha256:4963247…` |
+| redis | `docker.io/valkey/valkey:9@sha256:c123e371…` |
 
-`IMMICH_VERSION` is set in `.env` (currently `v3.0.1`, from `immich_version` in
+`IMMICH_VERSION` is set in `.env` (currently `v3.3.5`, from `immich_version` in
 group_vars). **The Postgres image is a fork with a vector extension** — a DB
 restore into a mismatched extension version can fail, so the
 [Immich ↔ Postgres mapping table in backup.md](backup.md#immich--postgres-image-pin--update-on-every-upgrade)
