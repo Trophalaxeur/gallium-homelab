@@ -56,12 +56,13 @@ resource "proxmox_virtual_environment_container" "backup" {
   # (terraform@pve!terraform_token) cannot create a `mount point type bind`
   # (API 403, "only allowed for root@pam"). On a from-scratch (re)create the
   # apply fails on THIS block until the mount is posted manually. Procedure:
-  #   1) Comment out both mount_point blocks below.
+  #   1) Comment out the three mount_point blocks below.
   #   2) `terraform apply` — creates the LXC without the mounts.
   #   3) On the Proxmox root console, post them by hand (<vmid> = var.backup_vmid):
   #        pct set <vmid> -mp0 /rpool/data/immich-photos,mp=/mnt/immich-photos,ro=1,backup=0
   #        pct set <vmid> -mp1 /mnt/hdd-external,mp=/mnt/hdd,backup=0
-  #   4) Uncomment both blocks and re-run `terraform apply` — no diff expected.
+  #        pct set <vmid> -mp2 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,ro=1,backup=0
+  #   4) Uncomment the three blocks and re-run `terraform apply` — no diff expected.
   mount_point {
     volume    = "/rpool/data/immich-photos"
     path      = "/mnt/immich-photos"
@@ -76,6 +77,16 @@ resource "proxmox_virtual_environment_container" "backup" {
     volume = "/mnt/hdd-external"
     path   = "/mnt/hdd"
     backup = false
+  }
+
+  # ── Bind-mount 3: Home Assistant's backups dataset, READ-ONLY ───────────────
+  # HA's own encrypted backup tarballs (terraform/hassium.tf). Same contract as
+  # the photos: this LXC ships them out but must never be able to alter them.
+  mount_point {
+    volume    = "/rpool/data/hassium-backups"
+    path      = "/mnt/hassium-backups"
+    read_only = true
+    backup    = false
   }
 
   network_interface {

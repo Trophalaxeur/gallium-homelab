@@ -52,12 +52,30 @@ resource "proxmox_virtual_environment_container" "hassium" {
     # writing to it. WAL usually replays cleanly on restore; that is a
     # likelihood, NOT a guarantee. The application-consistent layer is Home
     # Assistant's own scheduled backup, which must be enabled once in the UI
-    # (Settings → System → Backups) — its tarballs land on this rootfs and are
-    # then swept up by PBS. Until that is done, the only copy is the
-    # crash-consistent snapshot. Same reasoning that put the Immich photos on
-    # their own dataset with logical dumps rather than trusting a live
-    # snapshot. See docs/home-assistant.md.
+    # (Settings → System → Backups) — its tarballs land on the dataset
+    # mounted below, NOT on this rootfs. Same reasoning that put the Immich
+    # photos on their own dataset with logical dumps rather than trusting a
+    # live snapshot. See docs/home-assistant.md.
     size = 16
+  }
+
+  # ── Bind-mount: Home Assistant's backups dataset ──────────────────────────
+  # rpool/data/hassium-backups, created by the Ansible play "Provision ZFS
+  # datasets". HA writes its scheduled backups here (docker-compose.yml.j2
+  # mounts it over /config/backups). A dataset rather than the rootfs: it
+  # survives a rebuild of this LXC, sanoid snapshots it, and the backup LXC
+  # (105) mounts it read-only to ship it to Scaleway + HDD — the Immich photos
+  # pattern. backup=false: PBS never copies bind-mounts anyway.
+  #
+  # ⚠️ Same root@pam limitation as terraform/immich.tf: the scoped token cannot
+  # create a bind mount (API 403). On a from-scratch create: 1) comment this
+  # block out, 2) `terraform apply`, 3) on the Proxmox root console:
+  #      pct set <vmid> -mp0 /rpool/data/hassium-backups,mp=/mnt/hassium-backups,backup=0
+  # 4) uncomment and re-apply — no diff expected.
+  mount_point {
+    volume = "/rpool/data/hassium-backups"
+    path   = "/mnt/hassium-backups"
+    backup = false
   }
 
   network_interface {

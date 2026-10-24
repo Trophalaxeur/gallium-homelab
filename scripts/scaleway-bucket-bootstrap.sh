@@ -38,10 +38,10 @@ aws_s3api put-bucket-encryption \
   --bucket "$BUCKET" \
   --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
-echo "==> Applying lifecycle rule (expire db-backups/ at 90 days)"
+echo "==> Applying lifecycle rules (expire db-backups/ and hassium-backups/ at 90 days)"
 aws_s3api put-bucket-lifecycle-configuration \
   --bucket "$BUCKET" \
-  --lifecycle-configuration "file://${SCRIPT_DIR}/scaleway-lifecycle-db-backups.json"
+  --lifecycle-configuration "file://${SCRIPT_DIR}/scaleway-lifecycle.json"
 
 echo "==> Done. Verifying:"
 aws_s3api get-object-lock-configuration --bucket "$BUCKET"

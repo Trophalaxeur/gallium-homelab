@@ -43,8 +43,10 @@ backup_admin_email: "admin@flefevre.fr"
 smtp_from_backup: "backup@flefevre.fr"
 
 # Bind-mount paths INSIDE the backup LXC (posted by terraform/backup.tf):
-#   immich photos, READ-ONLY  ·  external HDD, writable (3rd physical copy)
+#   immich photos, READ-ONLY  ·  hassium backups, READ-ONLY  ·
+#   external HDD, writable (3rd physical copy)
 backup_photos_src: "/mnt/immich-photos"
+backup_hassium_src: "/mnt/hassium-backups"
 backup_hdd_mount: "/mnt/hdd"
 # HDD mount point on the Proxmox HOST (fstab, Étape 0-bis). Chowned to the
 # backup LXC's mapped root (100000) so the unprivileged LXC can write to it —
@@ -86,6 +88,15 @@ uptime_kuma_version: "1.23.16"
 # LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — why
 # Container rather than HA OS: docs/home-assistant.md.
 hassium_ip: "192.168.1.66"
+# ZFS dataset holding Home Assistant's scheduled backups — not the LXC rootfs,
+# so it survives a rebuild of LXC 107. Same shape as immich_photos_dataset:
+# created by the "Provision ZFS datasets" play, bind-mounted read-write into
+# hassium (terraform/hassium.tf) and read-only into the backup LXC
+# (terraform/backup.tf), which ships it to Scaleway + HDD.
+hassium_backups_dataset: "rpool/data/hassium-backups"
+# Where that dataset appears INSIDE the hassium LXC; docker-compose.yml.j2
+# mounts it over the container's /config/backups.
+homeassistant_backups_mount: "/mnt/hassium-backups"
 # Internal-only TLS name (AdGuard rewrite → .66), never port-forwarded — same
 # acme-on-adguard pattern as immich/uptime. Also the base URL of the ha-mcp
 # endpoint Claude Code connects to (/<vault_ha_mcp_secret_path>, routed by

@@ -49,6 +49,11 @@ services:
       - ./config:/config
       # HA reads the host clock for sun elevation and scheduling.
       - /etc/localtime:/etc/localtime:ro
+      # Scheduled backups: the hassium-backups ZFS dataset (bind-mounted into
+      # this LXC by terraform/hassium.tf), mounted over config/backups so HA's
+      # local backup location writes there unchanged. The backup LXC ships it
+      # to Scaleway + HDD.
+      - {{ homeassistant_backups_mount }}:/config/backups
 
   # MCP server Claude Code drives HA through (docs/home-assistant.md). Holds an
   # admin token of the dedicated `claude` HA user.

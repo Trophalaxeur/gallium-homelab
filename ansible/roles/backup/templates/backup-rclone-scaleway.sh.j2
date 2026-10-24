@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Étape 4a — nightly copy of the Immich photos + DB dumps to Scaleway Object
-# Storage. The bucket has a DEFAULT Object Lock retention (Compliance, 90 days)
+# Étape 4a — nightly copy of the Immich photos + DB dumps, and of Home
+# Assistant's backups, to Scaleway Object Storage. The bucket has a DEFAULT Object Lock retention (Compliance, 90 days)
 # set at creation (scripts/scaleway-bucket-bootstrap.sh), so every freshly PUT
 # object is locked automatically — no per-object flag needed here. Weekly
 # renewal (backup-object-lock-renew.py) keeps still-present photos locked past
@@ -11,6 +11,7 @@
 set -uo pipefail
 
 SRC="{{ backup_photos_src }}"
+HASSIUM_SRC="{{ backup_hassium_src }}"
 REMOTE="{{ rclone_remote }}:{{ scaleway_bucket }}"
 LOG="/var/log/backup-rclone-scaleway.log"
 KUMA_URL="{{ uptime_kuma_push_base }}/{{ vault_kuma_push_rclone_scaleway }}"
@@ -41,19 +42,29 @@ rclone copy "${SRC}/backups" "${REMOTE}/db-backups" \
   --transfers 4 --checkers 8 --stats-one-line --stats 1m
 rc_db=$?
 
-# Deadman gate: only ping success if BOTH copies succeeded AND a DB dump landed
-# in the last 25h (a stale dump means Immich's Database Backup silently stopped
-# — the photos copy alone is not a restorable backup, cf. limitation #8).
-fresh_dump=$(find "${SRC}/backups" -type f -mmin -1500 2>/dev/null | head -1)
+# Home Assistant's scheduled backups (HA's own encrypted .tar, written daily
+# at 01:30 into the hassium-backups dataset). Own prefix with its own 90-day
+# lifecycle expiry, like db-backups/ — never renewed by the Object Lock job.
+rclone copy "$HASSIUM_SRC" "${REMOTE}/hassium-backups" \
+  --transfers 4 --checkers 8 --stats-one-line --stats 1m
+rc_ha=$?
 
-if [[ $rc_lib -eq 0 && $rc_db -eq 0 && -n "$fresh_dump" ]]; then
-  echo "OK — library rc=$rc_lib db rc=$rc_db, fresh dump: $fresh_dump"
+# Deadman gate: only ping success if ALL copies succeeded AND both a DB dump
+# and a Home Assistant backup landed in the last 25h (a stale one means
+# Immich's Database Backup or HA's scheduled backup silently stopped — a copy
+# of stale files is not a restorable backup, cf. limitation #8).
+fresh_dump=$(find "${SRC}/backups" -type f -mmin -1500 2>/dev/null | head -1)
+fresh_ha=$(find "$HASSIUM_SRC" -type f -name '*.tar' -mmin -1500 2>/dev/null | head -1)
+
+if [[ $rc_lib -eq 0 && $rc_db -eq 0 && $rc_ha -eq 0 && -n "$fresh_dump" && -n "$fresh_ha" ]]; then
+  echo "OK — library rc=$rc_lib db rc=$rc_db ha rc=$rc_ha, fresh dump: $fresh_dump, fresh HA backup: $fresh_ha"
   curl -fsS -m 15 --retry 3 -G "$KUMA_URL" \
     --data-urlencode "status=up" --data-urlencode "msg=OK" >/dev/null || true
 else
-  echo "FAIL — library rc=$rc_lib db rc=$rc_db, fresh_dump='${fresh_dump:-none}'"
-  printf 'rclone → Scaleway failed on %s\nlibrary rc=%s db rc=%s\nfresh DB dump (<25h): %s\nSee %s\n' \
-    "$(hostname)" "$rc_lib" "$rc_db" "${fresh_dump:-NONE — Immich DB backup stale}" "$LOG" \
+  echo "FAIL — library rc=$rc_lib db rc=$rc_db ha rc=$rc_ha, fresh_dump='${fresh_dump:-none}' fresh_ha='${fresh_ha:-none}'"
+  printf 'rclone → Scaleway failed on %s\nlibrary rc=%s db rc=%s ha rc=%s\nfresh DB dump (<25h): %s\nfresh HA backup (<25h): %s\nSee %s\n' \
+    "$(hostname)" "$rc_lib" "$rc_db" "$rc_ha" "${fresh_dump:-NONE — Immich DB backup stale}" \
+    "${fresh_ha:-NONE — Home Assistant backup stale}" "$LOG" \
     | mail -r "$FROM" -s "[backup] rclone → Scaleway FAILED" "$ADMIN" || true
   # Explicit down push (faster than waiting for the missed-heartbeat timeout);
   # a dead cron that never runs still trips Kuma via the absent push.

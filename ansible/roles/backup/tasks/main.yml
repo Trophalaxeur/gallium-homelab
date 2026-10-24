@@ -10,7 +10,7 @@
 # rclone cannot extend retention on existing objects. rclone: the copy engine.
 # msmtp/mailutils: abort/alert mail, same pattern as neon.
 - name: Install packages
-  apt:
+  ansible.builtin.apt:
     name:
       - rclone
       - python3-boto3
@@ -24,7 +24,7 @@
 
 # Step 2 — msmtp (mail on abort; shared vault_smtp_password like neon)
 - name: Deploy msmtp config
-  template:
+  ansible.builtin.template:
     src: msmtprc.j2
     dest: /etc/msmtprc
     owner: root
@@ -33,7 +33,7 @@
   no_log: true   # renders vault_smtp_password
 
 - name: Ensure msmtp log file exists
-  file:
+  ansible.builtin.file:
     path: /var/log/msmtp.log
     state: touch
     owner: root
@@ -43,7 +43,7 @@
     access_time: preserve
 
 - name: Set sendmail symlink to msmtp
-  file:
+  ansible.builtin.file:
     src: /usr/bin/msmtp
     dest: /usr/sbin/sendmail
     state: link
@@ -60,10 +60,17 @@
 # a missing ro=1 means the backup jobs could mutate the source of truth.
 - name: Assert the immich-photos mount is present and read-only
   ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_photos_src }}
-  register: photos_mnt
+  register: backup_photos_mnt
   changed_when: false
-  failed_when: photos_mnt.rc != 0 or 'ro' not in photos_mnt.stdout.split(',')
+  failed_when: backup_photos_mnt.rc != 0 or 'ro' not in backup_photos_mnt.stdout.split(',')
   # rc != 0 → not mounted (missing bind-mount); 'ro' absent → not read-only.
+
+# Same contract for Home Assistant's backups: present, and read-only.
+- name: Assert the hassium-backups mount is present and read-only
+  ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_hassium_src }}
+  register: backup_hassium_mnt
+  changed_when: false
+  failed_when: backup_hassium_mnt.rc != 0 or 'ro' not in backup_hassium_mnt.stdout.split(',')
 
 - name: Assert the HDD bind-mount is actually mounted (not an empty dir)
   ansible.builtin.command: mountpoint -q {{ backup_hdd_mount }}
@@ -74,7 +81,7 @@
 # Step 4 — rclone remote for Scaleway (S3-compatible). Creds from vault, never
 # in the repo. This file is the crown jewel this LXC isolates from Immich.
 - name: Create rclone config directory
-  file:
+  ansible.builtin.file:
     path: /root/.config/rclone
     state: directory
     owner: root
@@ -82,7 +89,7 @@
     mode: "0700"
 
 - name: Deploy rclone config (Scaleway remote)
-  template:
+  ansible.builtin.template:
     src: rclone.conf.j2
     dest: /root/.config/rclone/rclone.conf
     owner: root
@@ -92,7 +99,7 @@
 
 # boto3 reads the same Scaleway key for the Object Lock renewal job.
 - name: Create aws credentials directory
-  file:
+  ansible.builtin.file:
     path: /root/.aws
     state: directory
     owner: root
@@ -100,7 +107,7 @@
     mode: "0700"
 
 - name: Deploy aws credentials (Scaleway, for object-lock renewal)
-  template:
+  ansible.builtin.template:
     src: aws-credentials.j2
     dest: /root/.aws/credentials
     owner: root
@@ -110,7 +117,7 @@
 
 # Step 5 — the three job scripts
 - name: Deploy backup job scripts
-  template:
+  ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/usr/local/bin/{{ item }}"
     owner: root
@@ -128,14 +135,14 @@
 # on LXCs provisioned before that. Cron already points at the .py — this only
 # clears the stale copy (which still holds a readable push token).
 - name: Remove the superseded shell version of the renewal job
-  file:
+  ansible.builtin.file:
     path: /usr/local/bin/backup-object-lock-renew.sh
     state: absent
 
 # Step 6 — crons: Scaleway 02:00, HDD 02:20 (after the DB dump lands), Object
 # Lock renewal Sunday 03:00. Timings chosen so the nightly chain doesn't overlap.
 - name: Deploy backup cron jobs
-  template:
+  ansible.builtin.template:
     src: cron-backup.j2
     dest: /etc/cron.d/backup-jobs
     owner: root
@@ -143,7 +150,7 @@
     mode: "0644"
 
 - name: Deploy logrotate config for backup job logs
-  template:
+  ansible.builtin.template:
     src: logrotate-backup.j2
     dest: /etc/logrotate.d/backup
     owner: root
