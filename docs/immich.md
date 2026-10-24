@@ -174,9 +174,16 @@ pitfalls — lives in
    in `docker-compose.yml.j2` **together** — copy them verbatim from upstream's
    compose for that exact version. Never bump one without the other.
 3. Update the [mapping table in backup.md](backup.md#immich--postgres-image-pin--update-on-every-upgrade).
-4. `ansible-playbook playbook.yml --limit immich` (pulls new images,
+4. Pre-flight: check that last night's Immich DB dump (`UPLOAD_LOCATION/backups`), the
+   PBS backup of LXC 104 and the hourly ZFS snapshots of `immich-photos` are fresh. If
+   not, take them by hand first — Immich cannot downgrade its DB, rollback = restore.
+5. `ansible-playbook playbook.yml --limit immich` (pulls new images,
    `docker compose up -d` recreates changed containers).
-5. Verify: `docker compose ps` (all `healthy`) + `curl https://photos.flefevre.fr/api/server/ping`.
+6. Verify: `docker compose ps` (all `healthy`, allow ~1 min), `curl
+   https://photos.flefevre.fr/api/server/ping`, and `docker compose exec -T
+   immich-server immich-admin schema-check` (expect "No schema drift detected").
+   A transient `Detected schema drift` WARN in the server log right after the
+   migrations is not conclusive — the command above is.
 
 ### TLS certificate renewal
 
@@ -189,6 +196,63 @@ See [How TLS is wired](#how-tls-is-wired) for the mechanism.
 Follow Immich's official restore procedure (stop stack → restore DB dump →
 restore files → restart). The [backup.md runbook](backup.md#restore-runbook)
 frames it in the homelab's scenarios.
+
+## What's new since v3.0.1
+
+Digest of the upstream release notes for the versions skipped by the
+v3.0.1 → v3.3.5 upgrade (deployed 2026-10-24), kept as a record of what the
+instance can now do. Source: [Immich releases](https://github.com/immich-app/immich/releases);
+this is a summary, not a substitute for them.
+
+### Features
+
+| Version | Feature | Notes |
+|---|---|---|
+| 3.1.0 | Undo on archive (web) | Button in the success notification |
+| 3.1.0 | Upload wakelock (web) | Keeps the screen awake while uploading; needs HTTPS (we have it) |
+| 3.1.0 | Map filtered by date range (mobile) | |
+| 3.1.0 | Workflows: server-path filter, EXIF filter, album-asset trigger | EXIF filter is string comparison only |
+| 3.1.0 | `--visibility` flag on CLI upload | |
+| 3.2.0 | Search API v2 + revamped search UI (web) | Search inside an album, combine filters with AND/OR |
+| 3.2.0 | Cluster groups (shared people) | Face recognition across photos of trusted users |
+| 3.2.0 | Dedicated memories page, tag renaming, assets-in-map-viewport timeline | |
+| 3.2.0 | Workflows: tag trigger + multi-tag action, workflow logs | |
+| 3.2.0 | API key rotation | |
+| 3.3.0 | Shared people management | Shared people show in both users' lists; both can edit names and birth dates; merge your faces into people shared with you |
+| 3.3.0 | Birthday memories | Generated for recognized people |
+| 3.3.0 | Auto-stacked mobile edits | Edits made in other phone apps are stacked on the original |
+| 3.3.0 | Higher-quality thumbnails and previews | Better resampling; existing thumbnails unchanged until regenerated |
+| 3.3.0 | Faster, lighter ML (opt-in) | `MACHINE_LEARNING_MODEL_REVISION=v2` |
+| 3.3.0 | New OCR models (PP-OCRv6 tiny/small/medium) | More accurate, multilingual |
+| 3.3.x | People query performance fixes | 3.3.3, 3.3.4 |
+| 3.3.5 | Security update | Upstream flags a CA-compromise fix and Node.js security patches: update promptly |
+
+### Breaking / behavior changes
+
+- **Mobile app drops iOS 14** (3.1.0) — keep the apps in step with the server.
+- OIDC/OAuth claims (role, quota, username) are re-synced on every login (3.1.0,
+  3.3.0). Not applicable here: no IdP is configured.
+- Storage-size reporting corrected (3.3.0); displayed capacity/usage may change.
+- No manual server migration was required for this jump. DB migrations ran at startup.
+
+### Compose changes absorbed by this upgrade
+
+Valkey digest bumped, Redis `healthcheck` added, `shm_size: 128mb` on the database
+(already present upstream in v3.0.1, missing from our template). Postgres image
+unchanged.
+
+### Not enabled yet — decide separately
+
+- **`MACHINE_LEARNING_MODEL_REVISION=v2`**: opt-in today, announced as a future
+  default. Outputs are numerically equivalent, so no job needs re-running. Would go in
+  `immich.env.j2`. First model load is slower (then cached).
+- **Cluster groups / shared people**: enabling requires resetting facial recognition for
+  the group, which **loses person names and birth dates**. Two admin accounts exist, so
+  it is relevant — do it deliberately, not as a side effect of an upgrade.
+- **Regenerate thumbnails** (Admin → Jobs) to get the 3.3.0 resampling on existing
+  assets. Optional, CPU-heavy on a large library.
+- **OCR**: unclear from the release notes whether the new models apply to already-indexed
+  assets; check the OCR job in Admin → Jobs before assuming a re-run is needed.
 
 ## Security notes
 
