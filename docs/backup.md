@@ -150,7 +150,10 @@ credentials exist only on this LXC. A compromised Immich (its web/API/ML surface
 therefore has no write path to any backup copy (Scénario 6 isolation).
 
 Managed by the `backup` Ansible role (`ansible/roles/backup/`). Crons
-(`/etc/cron.d/`, all as root, each script mails admin on failure via msmtp):
+(`/etc/cron.d/`, all as root, each script mails admin on failure via msmtp).
+**The backup LXC runs in UTC**: the schedules below are UTC, i.e. one hour later
+in Paris in winter (03:00 CET) and two in summer (04:00 CEST). Side effect: the
+jobs never run twice or get skipped on a DST change.
 
 | Schedule | Script | What it does |
 |---|---|---|
@@ -172,6 +175,16 @@ Key design points:
 - **Lifecycle on `db-backups/` and `hassium-backups/` (90 d,
   `scripts/scaleway-lifecycle.json`)** bounds accumulation — `copy` never
   deletes, so timestamped dumps and archives would otherwise pile up forever.
+  The bucket is versioned (Object Lock requires it), and on a versioned bucket
+  Scaleway's `Expiration` "only deletes the current version": it leaves a delete
+  marker and the data stays, billed, as a noncurrent version. Each rule therefore
+  also carries `NoncurrentVersionExpiration` (1 day). By then the version's
+  Object Lock retention (+90 d from upload, never renewed for these prefixes) has
+  run out, so the lock does not block the purge.
+- **No lifecycle rule on `library/`, on purpose.** If ransomware encrypts the
+  photos and the nightly copy pushes the encrypted files, the good originals
+  become noncurrent versions: they are the rollback. A noncurrent-version purge
+  there would delete exactly what a restore needs.
 
 ---
 
@@ -407,7 +420,12 @@ plus ZFS snapshots + PBS. Scénario 6 isolation verified (scoped key ≠ delete)
 - ✅ `terraform plan`: no diff on either mount.
 - ✅ Lifecycle rule `expire-hassium-backups-90d` added (console, see
   [Bucket configuration changes](#bucket-configuration-changes)).
-- ⏳ First real nightly run (02:00 Scaleway, 02:20 HDD) — check both Kuma probes
-  and the `hassium-backups/` prefix the next morning.
+- ✅ First real nightly run (2026-10-25, 02:00 / 02:20 UTC): the 6 archives are on
+  Scaleway `hassium-backups/` and on `/mnt/hdd/hassium-backups`; the three Kuma
+  probes are `up`, 0 down overnight; no failure mail. The DST change the same night
+  caused no double run (the backup LXC runs in UTC; PBS ran once).
+- ⚠️ The Scaleway job logs a burst of `403 Forbidden` every night (20–188 per run
+  over the last 9 logs), always recovered by rclone's attempt 2/3 — rc=0, so Kuma
+  stays up. Not caused by the HA prefix; under investigation.
 
 **Last full restore drill (Étape 6): _not yet run_** — schedule and record here.
