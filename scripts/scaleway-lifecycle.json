@@ -4,13 +4,15 @@
       "ID": "expire-db-backups-90d",
       "Status": "Enabled",
       "Filter": { "Prefix": "db-backups/" },
-      "Expiration": { "Days": 90 }
+      "Expiration": { "Days": 90 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
     },
     {
       "ID": "expire-hassium-backups-90d",
       "Status": "Enabled",
       "Filter": { "Prefix": "hassium-backups/" },
-      "Expiration": { "Days": 90 }
+      "Expiration": { "Days": 90 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 }
     }
   ]
 }
