@@ -389,11 +389,21 @@ token counts as a failed attempt**. Behind Caddy, the ban is keyed on the
 
 ### Name resolution on the LAN
 
-The Livebox hands DHCP clients `192.168.1.53` (AdGuard), then `1.1.1.1`
-(measured on thallium's wlan0 lease). `hassium.flefevre.fr` exists only
-as an AdGuard rewrite, with no public record, so a client that falls back to
-`1.1.1.1` cannot resolve it — expect occasional failures from phones. The LXCs
-themselves do not use AdGuard at all: they resolve through the Livebox.
+The Livebox hands DHCP clients `192.168.1.53` (AdGuard) as both primary and
+secondary DNS, with IPv6 off, so AdGuard is the only resolver on the LAN and
+answers `hassium.flefevre.fr` with `192.168.1.66`. A device whose DNS goes
+elsewhere — typically a phone with NordVPN on — gets the public record instead,
+which leads to [palladium](palladium.md) and needs the client certificate. The
+LXCs themselves do not use AdGuard at all: they resolve through the Livebox.
+
+### Remote access
+
+From the internet, Home Assistant is reached through [palladium](palladium.md),
+which requires a client certificate. hassium's Caddy trusts palladium as a proxy
+(`trusted_proxies`), and Home Assistant must list it too: add `192.168.1.68` to
+*Trusted proxies*, next to `127.0.0.1`. Without it, the IP ban below would key on
+palladium, and five failed logins from anywhere would lock out every remote
+client.
 
 ## Compliance with the official Container install
 

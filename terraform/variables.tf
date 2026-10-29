@@ -189,3 +189,23 @@ variable "hassium_lxc_template" {
   type        = string
   default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
 }
+
+# --- palladium (internet-facing gateway) ---
+
+variable "palladium_vmid" {
+  description = "VMID du conteneur palladium (passerelle exposée à internet, mTLS)"
+  type        = number
+  default     = 108
+}
+
+variable "palladium_ip" {
+  description = "IP statique du LXC palladium"
+  type        = string
+  default     = "192.168.1.68"
+}
+
+variable "palladium_lxc_template" {
+  description = "Template LXC pour palladium (Debian 13 recommandé — seul template disponible sur gallium)"
+  type        = string
+  default     = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+}

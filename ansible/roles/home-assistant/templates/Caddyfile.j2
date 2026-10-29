@@ -20,6 +20,17 @@
 # The ha-mcp sidecar is served under its secret path (vault), which is the
 # endpoint's only credential: this file is deployed with no_log, and must
 # never get a `log` directive — access logs would write the secret to disk.
+#
+# From the internet, requests arrive through palladium (mTLS gateway). Trusting
+# it keeps the real client address in X-Forwarded-For instead of palladium's,
+# so HA's IP ban never locks out the gateway — and with it every remote client.
+# HA itself must list palladium as a trusted proxy too (docs/palladium.md).
+{
+    servers {
+        trusted_proxies static {{ palladium_ip }}
+    }
+}
+
 {{ homeassistant_domain }} {
     tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
 

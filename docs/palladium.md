@@ -1,0 +1,219 @@
+---
+title: "palladium — the internet-facing gateway"
+description: "LXC 108, the only host the Livebox forwards to: Caddy requires a client certificate (mTLS) for Home Assistant and Immich, and serves Immich share links through immich-public-proxy."
+---
+
+# palladium — the internet-facing gateway
+
+LXC 108 on gallium. The Livebox forwards **port 443, and only 443, to this
+LXC** — nothing else in the homelab is reachable from the internet. Caddy then
+decides by name:
+
+| Name | Goes to | Requires |
+|---|---|---|
+| `hassium.flefevre.fr` | hassium (`.66`), Home Assistant | a client certificate |
+| `photos.flefevre.fr` | immich (`.63`) | a client certificate |
+| `share.flefevre.fr` | immich-public-proxy, on palladium | the share password |
+
+Without a valid client certificate, the TLS handshake fails before any HTTP is
+exchanged: a scanner never sees a login page, so a flaw in Home Assistant or
+Immich is not reachable from the internet. Visitors only get the share links,
+served by [immich-public-proxy](https://github.com/alangrainger/immich-public-proxy):
+shared albums only, read-only, share password and expiry enforced, no API key.
+
+**At home, palladium is not in the path.** AdGuard resolves `hassium` and
+`photos` to their own LXC, and every LAN device reaches them directly, with no
+certificate. Only `share.flefevre.fr` resolves to palladium on the LAN, because
+the proxy runs there.
+
+## Specs
+
+| Parameter | Value |
+|---|---|
+| Hostname | `palladium.lan`, `palladium.flefevre.fr` |
+| IP | `192.168.1.68` |
+| VMID | 108 |
+| RAM / disk / vCPU | 1 GB / 8 GB / 1 |
+| OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
+| Backup | none — stateless, rebuilt by `terraform apply` + one play |
+
+## How it is wired
+
+- **Server certificate**: one Let's Encrypt certificate for the three names,
+  issued on the AdGuard LXC (acme.sh, DNS-01 through Online.net) and pushed over
+  SSH by the `palladium-cert` role — the pattern of every other LXC. It is a
+  separate certificate from the ones hassium and immich hold for their own
+  names.
+- **Client certificates**: signed by a private client CA created on thallium
+  with [`scripts/mtls-client-cert.sh`](../scripts/mtls-client-cert.sh). The CA
+  **key** lives in `~/.local/share/gallium-mtls` and LastPass, never in the
+  repo and never on gallium. The repo only holds public halves:
+  `ansible/roles/palladium/files/client-ca.pem` and one
+  `files/client-certs/<device>.pem` per allowed device. Caddy accepts a client
+  certificate only if it is signed by the CA **and** listed there, which is
+  what makes revocation a file deletion.
+- **Upstreams**: palladium reaches hassium and immich by IP, with the SNI and
+  Host of the real name, so their own certificates still verify. The LXCs
+  resolve through the Livebox, which knows only the public records — a lookup
+  by name would loop back to palladium.
+- **Client address**: palladium forwards the real address in
+  `X-Forwarded-For`. hassium's Caddy trusts palladium (`trusted_proxies`), and
+  so must Home Assistant itself (step 5 below). Otherwise Home Assistant sees
+  every remote request as coming from palladium, and five failed logins from
+  anywhere ban the gateway — that is, every remote client.
+- **Public DNS**: `hassium`, `photos` and `share` are CNAMEs to the Orange
+  DynDNS name, which the Livebox updates when the public IP changes.
+
+## One-time setup
+
+In this order. Steps 1–3 change nothing for the outside world; steps 6–8 are
+the switch-over.
+
+1. **Client CA and device certificates**, on thallium:
+
+   ```bash
+   ./scripts/mtls-client-cert.sh ca               # asks for the CA passphrase
+   ./scripts/mtls-client-cert.sh issue pixel-8    # asks for it again, then an export password
+   ./scripts/mtls-client-cert.sh issue thallium   # same prompts
+   ```
+
+   Save `~/.local/share/gallium-mtls/client-ca.key` and its passphrase in
+   LastPass, as the secure note `gallium-mtls-client-ca`. Commit `client-ca.pem` and `client-certs/*.pem` — public halves
+   only. The play refuses to run without them.
+
+2. **Create the LXC**: `terraform plan -out palladium.tfplan`, review, then
+   `terraform apply palladium.tfplan`. No bind-mount, so no root@pam step.
+
+3. **Deploy**:
+
+   ```bash
+   ansible-playbook playbook.yml --limit adguard,palladium,hassium
+   ```
+
+   adguard for the DNS rewrites, the deploy keypair and the certificate;
+   hassium for its `trusted_proxies`.
+
+4. **Immich**: Administration → Settings → Server → *External domain* =
+   `https://share.flefevre.fr`. Share links now point to the proxy.
+
+5. **Home Assistant**: Settings → System → Network → *Trusted proxies*: add
+   `192.168.1.68` next to `127.0.0.1`. The save restarts HA and must be
+   confirmed within 5 minutes ([home-assistant.md](home-assistant.md#network-settings--one-time-after-the-first-deploy)).
+
+6. **Livebox, DynDNS**: enable the Orange DynDNS client.
+
+7. **Online.net DNS**: lower the TTL, then make `photos`, `hassium` and `share`
+   CNAMEs to the DynDNS name. `photos` replaces its A record.
+
+8. **Livebox, port forwarding**: forward TCP 443 to `192.168.1.68`, and delete
+   the 80 and 443 rules to immich. Port 80 stays closed: certificates are
+   validated over DNS.
+
+9. **Devices**: install `pixel-8.p12` and `thallium.p12` as described in
+   [Install the certificate on the device](#install-the-certificate-on-the-device).
+
+## Checks
+
+- On 4G, **without** a certificate: `curl -sv https://hassium.flefevre.fr`
+  fails during the handshake (`certificate required`), same for `photos`.
+- On 4G, **with** the certificate: the Home Assistant and Immich apps work,
+  including the Immich background backup.
+- A share link opened in a private window asks for the share password and shows
+  only that album.
+- At home, NordVPN off: everything loads directly, palladium not involved.
+- At home, NordVPN on with the apps excluded: they go through the Livebox
+  hairpin to palladium, with the certificate.
+
+## Devices
+
+Allowed today: `pixel-8` (Android phone) and `thallium` (Firefox).
+
+### Add a device
+
+1. **Pick a name** for the physical device, kebab-case: the model
+   (`pixel-8`), or the hostname for a computer (`thallium`). It becomes the
+   certificate's CN, the `.pem` file name and the label Android shows when an
+   app asks for a certificate. One certificate per device, so a loss revokes
+   only that one.
+2. **The CA key must be on the machine running the script.** On thallium it is
+   already in `~/.local/share/gallium-mtls/`. Elsewhere, restore it from the
+   LastPass note `gallium-mtls-client-ca`:
+
+   ```bash
+   mkdir -p ~/.local/share/gallium-mtls && chmod 700 ~/.local/share/gallium-mtls
+   $EDITOR ~/.local/share/gallium-mtls/client-ca.key   # paste the PEM from LastPass
+   chmod 600 ~/.local/share/gallium-mtls/client-ca.key
+   ```
+
+3. **Issue the certificate** from the repo root:
+
+   ```bash
+   ./scripts/mtls-client-cert.sh issue <device>
+   ```
+
+   It asks for the CA passphrase (LastPass), then an export password for the
+   `.p12`: a throwaway, typed once at import. A wrong CA passphrase leaves an
+   empty `<device>.pem` behind; delete it with `<device>.key` and `.csr` from
+   `~/.local/share/gallium-mtls/`, then retry.
+4. **Allow it on palladium**: commit
+   `ansible/roles/palladium/files/client-certs/<device>.pem` (branch + PR),
+   then once merged:
+
+   ```bash
+   ansible-playbook playbook.yml --limit palladium
+   ```
+
+5. **Install** `~/.local/share/gallium-mtls/<device>.p12` on the device (next
+   section), then delete the `.p12` from both places. If it is ever lost, issue
+   a new one.
+
+### Install the certificate on the device
+
+- **Android**:
+  1. Copy the `.p12` to the phone.
+  2. Open *Settings → Security → Encryption & credentials → Install a
+     certificate → VPN & app user certificate*.
+  3. Pick the file and enter the export password.
+  4. The Home Assistant app asks which certificate to use when it first
+     connects.
+  5. The Immich app imports the `.p12` itself, from its advanced settings.
+  6. In NordVPN, exclude both apps (*Settings → Split tunneling*).
+- **Firefox on Linux**: Firefox keeps its own certificate store, per profile.
+  From the command line (`pk12util` comes with the `nss` package):
+
+  ```bash
+  profile=$(sed -n 's/^Default=\(.*default-release\)$/\1/p' ~/.mozilla/firefox/profiles.ini)
+  pk12util -i ~/.local/share/gallium-mtls/<device>.p12 -d "sql:$HOME/.mozilla/firefox/$profile"
+  ```
+
+  Restart Firefox. Or use the UI: *Settings → Privacy & Security → View
+  Certificates → Your Certificates → Import*. Firefox asks which certificate
+  to present on the first visit; tick *Remember this decision*.
+- **Windows**: double-click the `.p12` and choose *Current user*. Edge and
+  Chrome use that store. Firefox needs the UI import above.
+- **Check**: from outside (4G, or NordVPN on), `https://hassium.flefevre.fr`
+  loads. At home it always loads, with or without the certificate.
+
+### Revoke, renew
+
+- **Revoke** (lost phone, retired laptop): delete
+  `ansible/roles/palladium/files/client-certs/<device>.pem`, commit, re-run
+  `--limit palladium`. The certificate is refused from the next connection on.
+- **Renew**: device certificates last 2 years
+  (`openssl x509 -in <pem> -noout -enddate`). Re-issue with the same command;
+  the new `.pem` replaces the old one.
+- **CA**: valid 10 years. Rotating it means re-issuing every device.
+
+## Troubleshooting
+
+- **The app says the server is unreachable, at home**: check whether NordVPN is
+  on and the app excluded from it. With NordVPN on and the app not excluded,
+  traffic leaves through Nord, which is fine — but it then needs the
+  certificate.
+- **Handshake refused with a certificate installed**: the device's `.pem` is
+  missing from `files/client-certs/`, or the play was not re-run after adding
+  it. `journalctl -u caddy` on palladium names the rejected certificate.
+- **HTTP 502**: the upstream LXC or its Caddy is down — palladium itself is
+  fine.
+- **Share links point to `photos.flefevre.fr`**: the Immich *External domain*
+  (step 4) is not set.

@@ -1,0 +1,10 @@
+---
+# The packaged unit runs `caddy reload --force`, so this also re-reads the
+# client CA and device certificates when only those files changed. Caddy keeps
+# the old config if the new one fails to load, so a reload before the cert has
+# been pushed from adguard is a safe no-op error rather than an outage.
+- name: Reload caddy
+  ansible.builtin.systemd:
+    name: caddy
+    state: reloaded
+  failed_when: false

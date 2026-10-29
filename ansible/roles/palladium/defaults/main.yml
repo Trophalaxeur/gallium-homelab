@@ -1,0 +1,6 @@
+---
+palladium_install_dir: /opt/immich-public-proxy
+# Loopback only: Caddy (same LXC) is the only client.
+palladium_ipp_port: 3000
+# Where the client CA and the allowed device certificates land on palladium.
+palladium_mtls_dir: /etc/caddy/mtls

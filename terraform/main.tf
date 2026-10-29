@@ -69,9 +69,9 @@ resource "proxmox_virtual_environment_container" "adguard" {
   }
 
   # First to boot, before every other LXC (neon 2, pbs 4, immich 5, backup 6,
-  # uptime 7, hassium 8). AdGuard is the primary DNS the Livebox hands to
-  # DHCP clients on the LAN (measured 2026-10-18 on thallium's wlan0 lease:
-  # 192.168.1.53, then 1.1.1.1), and the only resolver that knows the
+  # uptime 7, hassium 8, palladium 9). AdGuard is the only DNS the Livebox
+  # hands to DHCP clients on the LAN (primary and secondary both 192.168.1.53,
+  # IPv6 off since 2026-10-29), and the only resolver that knows the
   # *.flefevre.fr / *.lan rewrites. After a gallium reboot those clients lose
   # homelab names until it answers; booting it first shortens that window.
   #

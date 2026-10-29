@@ -1,0 +1,52 @@
+# Managed by Ansible (palladium role) — do not edit on the host.
+#
+# The only host the Livebox forwards to (443). One cert covers the three names
+# (palladium-cert role, issued on adguard and pushed over SSH).
+#
+# - {{ homeassistant_domain }} and {{ immich_domain }} require a client
+#   certificate signed by the client CA AND listed in client-certs.pem: no
+#   certificate, or a removed one, and the TLS handshake fails before any HTTP.
+#   Revoking a device = deleting its .pem from roles/palladium/files and
+#   re-running the play (docs/palladium.md).
+# - {{ immich_share_domain }} needs no certificate: immich-public-proxy only
+#   serves shared albums, behind the share password.
+#
+# Upstreams are the LXCs' own Caddy, reached by IP (the LXCs resolve through
+# the Livebox, which would send these names back here) with the SNI and Host
+# of the real name, so their certificates still verify. They see palladium as
+# the client and the real address in X-Forwarded-For — hassium trusts it
+# (home-assistant role Caddyfile + HA's trusted proxies).
+(client_cert) {
+    tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem {
+        client_auth {
+            mode require_and_verify
+            trust_pool file {{ palladium_mtls_dir }}/client-ca.pem
+            verifier leaf {
+                file {{ palladium_mtls_dir }}/client-certs.pem
+            }
+        }
+    }
+}
+
+{{ homeassistant_domain }} {
+    import client_cert
+    reverse_proxy https://{{ hassium_ip }} {
+        transport http {
+            tls_server_name {{ homeassistant_domain }}
+        }
+    }
+}
+
+{{ immich_domain }} {
+    import client_cert
+    reverse_proxy https://{{ immich_ip }} {
+        transport http {
+            tls_server_name {{ immich_domain }}
+        }
+    }
+}
+
+{{ immich_share_domain }} {
+    tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
+    reverse_proxy 127.0.0.1:{{ palladium_ipp_port }}
+}
