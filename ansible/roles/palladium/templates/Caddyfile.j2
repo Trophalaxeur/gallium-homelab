@@ -13,9 +13,11 @@
 #
 # Upstreams are the LXCs' own Caddy, reached by IP (the LXCs resolve through
 # the Livebox, which would send these names back here) with the SNI and Host
-# of the real name, so their certificates still verify. They see palladium as
-# the client and the real address in X-Forwarded-For — hassium trusts it
-# (home-assistant role Caddyfile + HA's trusted proxies).
+# of the real name, so their certificates still verify. `header_up Host {host}`
+# is required: for an HTTPS upstream, Caddy's default Host is the upstream
+# address (192.168.1.x), which matches no site there — an empty 200 (measured).
+# They see palladium as the client and the real address in X-Forwarded-For —
+# hassium and immich trust it (their role Caddyfile + HA's trusted proxies).
 #
 # Never add a `log` directive: requests to {{ homeassistant_domain }} include
 # the ha-mcp secret path (its only credential, see the home-assistant role
@@ -35,6 +37,7 @@
 {{ homeassistant_domain }} {
     import client_cert
     reverse_proxy https://{{ hassium_ip }} {
+        header_up Host {host}
         transport http {
             tls_server_name {{ homeassistant_domain }}
         }
@@ -44,6 +47,7 @@
 {{ immich_domain }} {
     import client_cert
     reverse_proxy https://{{ immich_ip }} {
+        header_up Host {host}
         transport http {
             tls_server_name {{ immich_domain }}
         }

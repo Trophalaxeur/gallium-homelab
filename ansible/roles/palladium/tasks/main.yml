@@ -210,10 +210,10 @@
     validate: caddy adapt --adapter caddyfile --config %s
   notify: Reload caddy
 
-# Enabled so it comes up on boot; NOT started here — Caddy refuses to start
-# while /etc/caddy/cert/*.pem are absent (fresh install, cert not yet pushed).
-# The palladium-cert role's ssh deploy-hook runs `systemctl restart caddy`
-# right after landing the cert, which starts it the first time.
+# Enabled so it comes up on boot; not (re)started here — our config cannot
+# load while /etc/caddy/cert/*.pem are absent (fresh install: the package is
+# still running its stock config). The palladium-cert role's ssh deploy-hook
+# runs `systemctl restart caddy` right after landing the cert.
 - name: Enable Caddy service
   ansible.builtin.systemd:
     name: caddy
