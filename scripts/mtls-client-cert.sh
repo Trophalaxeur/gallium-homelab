@@ -49,6 +49,9 @@ case "${1:-}" in
     csr="$mtls_dir/$device.csr"
     p12="$mtls_dir/$device.p12"
     cert="$files_dir/client-certs/$device.pem"
+    # Signed here first, moved into the repo only once everything succeeded:
+    # a wrong passphrase must not leave an empty .pem for `git add` to pick up.
+    cert_tmp="$mtls_dir/$device.pem"
     mkdir -p "$files_dir/client-certs"
 
     # RSA rather than EC: the widest client support (Android KeyChain, the
@@ -57,18 +60,19 @@ case "${1:-}" in
       -subj "/CN=$device"
     # Prompts for the CA key passphrase. 2 years, then re-issue.
     openssl x509 -req -in "$csr" -CA "$ca_cert" -CAkey "$ca_key" \
-      -set_serial "0x$(openssl rand -hex 16)" -days 730 -sha256 -out "$cert" \
+      -set_serial "0x$(openssl rand -hex 16)" -days 730 -sha256 -out "$cert_tmp" \
       -extfile <(printf '%s\n' \
         "basicConstraints=critical,CA:FALSE" \
         "keyUsage=critical,digitalSignature" \
         "extendedKeyUsage=clientAuth")
-    chmod 644 "$cert"
     rm -f "$csr"
     # -legacy: Android rejects the AES-based PKCS#12 OpenSSL 3 writes by
     # default. Prompts for an export password — keep it simple, it is typed
     # once on the phone.
-    openssl pkcs12 -export -legacy -inkey "$key" -in "$cert" -certfile "$ca_cert" \
+    openssl pkcs12 -export -legacy -inkey "$key" -in "$cert_tmp" -certfile "$ca_cert" \
       -name "$device" -out "$p12"
+    mv "$cert_tmp" "$cert"
+    chmod 644 "$cert"
     openssl x509 -in "$cert" -noout -subject -enddate
     echo "Install on the device: $p12 (delete it once installed)"
     echo "Commit:                $cert"

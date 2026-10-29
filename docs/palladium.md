@@ -36,6 +36,7 @@ the proxy runs there.
 | RAM / disk / vCPU | 1 GB / 8 GB / 1 |
 | OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
 | Backup | none — stateless, rebuilt by `terraform apply` + one play |
+| Updates | `unattended-upgrades`, daily: Debian security + the Caddy repo. immich-public-proxy is a pinned image — watch its [releases](https://github.com/alangrainger/immich-public-proxy/releases) (GitHub → Watch → Custom → Releases) and bump `vars.yml` |
 
 ## How it is wired
 
@@ -61,8 +62,11 @@ the proxy runs there.
   so must Home Assistant itself (step 5 below). Otherwise Home Assistant sees
   every remote request as coming from palladium, and five failed logins from
   anywhere ban the gateway — that is, every remote client.
-- **Public DNS**: `hassium`, `photos` and `share` are CNAMEs to the Orange
-  DynDNS name, which the Livebox updates when the public IP changes.
+- **Public DNS**: `hassium`, `photos` and `share` are A records at Online.net
+  to the line's **fixed** IPv4 (free Orange Pro option, activated 2026-10-29),
+  so there is no DynDNS client or third party to depend on. Each name also
+  carries a CAA record: only this acme.sh account, over DNS-01, may get a
+  certificate for it.
 
 ## One-time setup
 
@@ -87,23 +91,45 @@ the switch-over.
 3. **Deploy**:
 
    ```bash
-   ansible-playbook playbook.yml --limit adguard,palladium,hassium
+   ansible-playbook playbook.yml --limit adguard,palladium,hassium,immich
    ```
 
    adguard for the DNS rewrites, the deploy keypair and the certificate;
-   hassium for its `trusted_proxies`.
+   hassium and immich for their `trusted_proxies`.
 
 4. **Immich**: Administration → Settings → Server → *External domain* =
-   `https://share.flefevre.fr`. Share links now point to the proxy.
+   `https://share.flefevre.fr`. Share links now point to the proxy. Links
+   already sent as `photos.flefevre.fr/share/<key>` stop working for visitors
+   after step 8 (that name now requires a certificate): resend them with
+   `share.flefevre.fr` — same `/share/<key>` path.
 
 5. **Home Assistant**: Settings → System → Network → *Trusted proxies*: add
    `192.168.1.68` next to `127.0.0.1`. The save restarts HA and must be
    confirmed within 5 minutes ([home-assistant.md](home-assistant.md#network-settings--one-time-after-the-first-deploy)).
 
-6. **Livebox, DynDNS**: enable the Orange DynDNS client.
+6. **Fixed IPv4**: the Orange Pro option *Adresse IP fixe* must be active
+   (Espace Client Pro → services et contrats; confirmed by SMS/mail, then
+   power-cycle the Livebox). Read the address from thallium:
 
-7. **Online.net DNS**: lower the TTL, then make `photos`, `hassium` and `share`
-   CNAMEs to the DynDNS name. `photos` replaces its A record.
+   ```bash
+   dig +short myip.opendns.com @resolver1.opendns.com
+   ```
+
+7. **Online.net DNS**:
+   - `photos`, `hassium`, `share`: A records to that address, TTL 3600.
+     `photos` already exists — update it if the fixed IP differs from the old
+     dynamic one, or Immich is unreachable from outside until you do.
+   - On each of the three names, if the zone editor offers the CAA type:
+
+     ```
+     0 issue "letsencrypt.org; validationmethods=dns-01; accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/3299932925"
+     ```
+
+     The account is adguard's acme.sh one
+     (`grep ACCOUNT_URL /root/.acme.sh/ca/acme-v02.api.letsencrypt.org/directory/ca.conf`).
+     Not on the apex: `flefevre.fr` is served by Vercel, which gets its own
+     certificates from another account. Without CAA support, skip it — it is
+     hardening, not a prerequisite.
 
 8. **Livebox, port forwarding**: forward TCP 443 to `192.168.1.68`, and delete
    the 80 and 443 rules to immich. Port 80 stays closed: certificates are
@@ -114,6 +140,12 @@ the switch-over.
 
 ## Checks
 
+- On palladium, `unattended-upgrade --dry-run -d 2>&1 | grep -i 'allowed origins'`
+  lists the Debian-Security origins and `cloudsmith/caddy/stable`. A Caddy
+  upgrade that would prompt about the Ansible-managed `/etc/caddy/Caddyfile`
+  is skipped, not forced — `/var/log/unattended-upgrades/` says so; upgrade it
+  by hand (`apt install caddy`, keep the current file).
+
 - On 4G, **without** a certificate: `curl -sv https://hassium.flefevre.fr`
   fails during the handshake (`certificate required`), same for `photos`.
 - On 4G, **with** the certificate: the Home Assistant and Immich apps work,
@@ -121,8 +153,10 @@ the switch-over.
 - A share link opened in a private window asks for the share password and shows
   only that album.
 - At home, NordVPN off: everything loads directly, palladium not involved.
-- At home, NordVPN on with the apps excluded: they go through the Livebox
-  hairpin to palladium, with the certificate.
+- At home, NordVPN on with the apps excluded: same as off — excluded apps use
+  the Wi-Fi and its DNS (AdGuard), so they reach the LXCs directly. Apps not
+  excluded leave through Nord and come back through palladium, with the
+  certificate.
 
 ## Devices
 
@@ -152,9 +186,8 @@ Allowed today: `pixel-8` (Android phone) and `thallium` (Firefox).
    ```
 
    It asks for the CA passphrase (LastPass), then an export password for the
-   `.p12`: a throwaway, typed once at import. A wrong CA passphrase leaves an
-   empty `<device>.pem` behind; delete it with `<device>.key` and `.csr` from
-   `~/.local/share/gallium-mtls/`, then retry.
+   `.p12`: a throwaway, typed once at import. A wrong CA passphrase stops the
+   script before anything reaches the repo: just run it again.
 4. **Allow it on palladium**: commit
    `ansible/roles/palladium/files/client-certs/<device>.pem` (branch + PR),
    then once merged:
@@ -212,8 +245,26 @@ Allowed today: `pixel-8` (Android phone) and `thallium` (Firefox).
   certificate.
 - **Handshake refused with a certificate installed**: the device's `.pem` is
   missing from `files/client-certs/`, or the play was not re-run after adding
-  it. `journalctl -u caddy` on palladium names the rejected certificate.
+  it. Caddy does not log refused handshakes at its default level, so check
+  both ends instead. On palladium, list the allowed devices:
+
+  ```bash
+  openssl crl2pkcs7 -nocrl -certfile /etc/caddy/mtls/client-certs.pem \
+    | openssl pkcs7 -print_certs -noout | grep subject
+  ```
+
+  From thallium, test a device's certificate (from 4G or NordVPN on, so the
+  request reaches palladium):
+
+  ```bash
+  curl -sv --cert ansible/roles/palladium/files/client-certs/<device>.pem \
+    --key ~/.local/share/gallium-mtls/<device>.key https://hassium.flefevre.fr -o /dev/null
+  ```
 - **HTTP 502**: the upstream LXC or its Caddy is down — palladium itself is
   fine.
+- **acme.sh fails with `CAA record ... prevents issuance`** (hassium, photos or
+  share): the CAA records pin adguard's Let's Encrypt account. A rebuilt
+  adguard registers a new one — put its `ACCOUNT_URL` (step 7) in the three
+  CAA records, then re-run the cert plays.
 - **Share links point to `photos.flefevre.fr`**: the Immich *External domain*
   (step 4) is not set.

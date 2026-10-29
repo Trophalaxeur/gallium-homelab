@@ -71,8 +71,8 @@ rpool/data/
 **Reachable from the internet through [palladium](palladium.md) only**, with a
 client certificate:
 
-- **Public path:** `photos.flefevre.fr` is a CNAME at Online.net to the Orange
-  DynDNS name; the Livebox forwards `:443` to palladium, which requires a client
+- **Public path:** `photos.flefevre.fr` is an A record at Online.net to the
+  line's fixed IPv4; the Livebox forwards `:443` to palladium, which requires a client
   certificate and then proxies to `192.168.1.63`. Share links go to
   `share.flefevre.fr` (immich-public-proxy on palladium), never to Immich itself.
 - **Internal path:** AdGuard rewrites both `immich.lan` and `photos.flefevre.fr`

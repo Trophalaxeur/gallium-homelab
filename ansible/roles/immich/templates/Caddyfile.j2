@@ -3,6 +3,16 @@
 # Same pattern as uptime-kuma: cert issued on the AdGuard LXC (acme.sh, DNS-01)
 # and pushed here over SSH (immich-cert role) — Caddy only terminates TLS on
 # :443 and proxies to the Immich server container, bound to loopback:2283.
+#
+# From the internet, requests arrive through palladium (mTLS gateway): trusting
+# it passes the real client address on, instead of palladium's, to Immich's
+# sessions and logs.
+{
+    servers {
+        trusted_proxies static {{ palladium_ip }}
+    }
+}
+
 {{ immich_domain }} {
     tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem
     reverse_proxy 127.0.0.1:2283

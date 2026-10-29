@@ -16,6 +16,10 @@
 # of the real name, so their certificates still verify. They see palladium as
 # the client and the real address in X-Forwarded-For — hassium trusts it
 # (home-assistant role Caddyfile + HA's trusted proxies).
+#
+# Never add a `log` directive: requests to {{ homeassistant_domain }} include
+# the ha-mcp secret path (its only credential, see the home-assistant role
+# Caddyfile), and access logs would write it to disk here too.
 (client_cert) {
     tls /etc/caddy/cert/cert.pem /etc/caddy/cert/key.pem {
         client_auth {

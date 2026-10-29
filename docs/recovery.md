@@ -35,6 +35,7 @@ This document lists every secret used in this project, where it lives, and how t
 | Immich SMTP app password | Immich DB (set in the UI, not IaC) | No |
 | Scaleway bootstrap creds | `scripts/.scaleway-credentials.env` | No (gitignored) |
 | ansible-vault password | Password manager only | No |
+| palladium client CA key + passphrase (signs device certificates, mTLS) | `~/.local/share/gallium-mtls/client-ca.key` on thallium + LastPass `gallium-mtls-client-ca` | No (public `client-ca.pem` and device `.pem` only) |
 
 ---
 
@@ -85,10 +86,23 @@ Generate a new API key in the Online.net console (Account → API keys) and upda
 
 ### adguard→`<host>` cert deploy key lost / rotate
 
-Not a vault secret. The ed25519 keys acme.sh (on adguard) uses to push each TLS cert over SSH are generated on adguard at deploy time (`playbook.yml` adguard play) and live only at `/root/.ssh/<host>-cert-deploy` there — one pair per target (`immich`, `uptime`). To rotate:
+Not a vault secret. The ed25519 keys acme.sh (on adguard) uses to push each TLS cert over SSH are generated on adguard at deploy time (`playbook.yml` adguard play) and live only at `/root/.ssh/<host>-cert-deploy` there — one pair per target (`immich`, `uptime`, `hassium`, `palladium`). To rotate:
 
 1. On **adguard**: `rm /root/.ssh/<host>-cert-deploy{,.pub}`.
 2. `ansible-playbook playbook.yml --limit adguard,<host>` — adguard regenerates the pair, the target re-authorizes the new public half for `certdeploy` (`exclusive: true` drops the old one).
+
+### palladium client CA key lost / leaked
+
+The CA signs the device certificates palladium accepts (docs/palladium.md).
+
+- **Lost** (no copy on thallium, none in LastPass): existing devices keep
+  working, but no new one can be issued. Create a new CA and re-issue every
+  device: delete `ansible/roles/palladium/files/client-ca.pem` and
+  `files/client-certs/*.pem`, run `./scripts/mtls-client-cert.sh ca`, then
+  `issue <device>` for each, commit, `--limit palladium`, reinstall each `.p12`.
+- **Leaked**: low impact on its own — palladium also requires each device's
+  certificate to be listed in `files/client-certs/`, so a certificate forged
+  with the stolen key is refused. Rotate anyway, with the same procedure.
 
 ### Neon vault secrets lost
 
@@ -132,6 +146,7 @@ Then update the public key in two places:
 Homelab / terraform.tfvars          ← full file content
 Homelab / ansible-vault password    ← vault encryption password
 Homelab / AdGuard admin password    ← plaintext password (before hashing)
+Homelab / gallium-mtls-client-ca    ← client CA key (PEM) + its passphrase
 ```
 
 ---

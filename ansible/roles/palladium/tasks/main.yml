@@ -97,6 +97,32 @@
     state: present
     update_cache: true
 
+# --- Security updates — the only internet-facing host must patch itself ---
+# Debian's stock 50unattended-upgrades already allows the Debian-Security
+# origins; the extra file adds the Caddy repo (origin taken from its Release
+# file). immich-public-proxy is a pinned image: bumped by hand (vars.yml).
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Enable the daily unattended upgrade run
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+- name: Allow unattended upgrades from the Caddy repo
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52unattended-upgrades-caddy
+    content: |
+      Unattended-Upgrade::Origins-Pattern {
+          "origin=cloudsmith/caddy/stable";
+      };
+    mode: "0644"
+
 - name: Create certdeploy user (target of the acme.sh ssh deploy-hook)
   ansible.builtin.user:
     name: certdeploy
