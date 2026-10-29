@@ -1,0 +1,19 @@
+---
+# The packaged unit runs `caddy reload --force`, so this also re-reads the
+# client CA and device certificates when only those files changed. That is the
+# revocation path: a failed reload keeps the OLD config — revoked device still
+# accepted — so it must fail the play, never be ignored.
+#
+# `state: reloaded` would START an inactive unit. Caddy is first started by the
+# cert push (palladium-cert role), and a stopped Caddy reads the current files
+# when it starts anyway — so the reload only runs while Caddy is up.
+- name: Check whether caddy is running
+  ansible.builtin.service_facts:
+  listen: Reload caddy
+
+- name: Reload running caddy
+  ansible.builtin.systemd:
+    name: caddy
+    state: reloaded
+  when: ansible_facts.services['caddy.service'].state == 'running'
+  listen: Reload caddy

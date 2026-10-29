@@ -1,6 +1,6 @@
 ---
 title: "Immich — self-hosted photos"
-description: "LXC 104 running Immich (Docker Compose, ML enabled) — the homelab's photo/video library, served over TLS at photos.flefevre.fr, with its photos on a dedicated ZFS dataset."
+description: "LXC 104 running Immich (Docker Compose, ML enabled) — the homelab's photo/video library, served over TLS at photos.flefevre.fr (remotely through palladium, with a client certificate), with its photos on a dedicated ZFS dataset."
 ---
 
 # Immich — self-hosted photos
@@ -8,7 +8,8 @@ description: "LXC 104 running Immich (Docker Compose, ML enabled) — the homela
 LXC 104 on gallium, running [Immich](https://immich.app) as a Docker Compose
 stack (server + machine-learning + PostgreSQL + Valkey). It is the homelab's
 photo/video library — the **only irreplaceable data** on the box — served over
-HTTPS at `https://photos.flefevre.fr`, publicly reachable.
+HTTPS at `https://photos.flefevre.fr`. From the internet it is reachable only
+through [palladium](palladium.md), with a client certificate.
 
 Its photos live on a **separate ZFS dataset**, not the container rootfs, so they
 get their own backup treatment (ZFS snapshots + off-site rclone). See
@@ -67,13 +68,13 @@ rpool/data/
 
 ## Network & TLS
 
-**Publicly exposed at `https://photos.flefevre.fr`** — unlike the LAN-only
-services, this one is reachable from the internet:
+**Reachable from the internet through [palladium](palladium.md) only**, with a
+client certificate:
 
-- **Public path:** `photos.flefevre.fr` is registered at Online.net → resolves to
-  the home WAN IP; the Livebox 6 Pro forwards `:443` → `192.168.1.63`. Verified
-  reachable from an external exit point (`{"res":"pong"}` on
-  `/api/server/ping`, no hairpin NAT).
+- **Public path:** `photos.flefevre.fr` is an A record at Online.net to the
+  line's fixed IPv4; the Livebox forwards `:443` to palladium, which requires a client
+  certificate and then proxies to `192.168.1.63`. Share links go to
+  `share.flefevre.fr` (immich-public-proxy on palladium), never to Immich itself.
 - **Internal path:** AdGuard rewrites both `immich.lan` and `photos.flefevre.fr`
   → `192.168.1.63`, so LAN clients hit it directly (no hairpin). `immich.lan`
   stays the internal/technical name; the cert only covers `photos.flefevre.fr`.
@@ -256,10 +257,9 @@ unchanged.
 
 ## Security notes
 
-- **No native 2FA/TOTP.** Immich has no built-in second factor, and this instance
-  is internet-facing (`photos.flefevre.fr`). Hardening path = an external OAuth
-  IdP (Authentik/Authelia) in front. Tracked as Multica ticket **MEN-13** — still
-  open.
-- No rate-limiting / WAF / fail2ban in front of the login today — password
-  strength is the only gate. Consider before treating public exposure as
-  permanent.
+- **No native 2FA/TOTP.** Immich has no built-in second factor. From the
+  internet, [palladium](palladium.md)'s client certificate acts as that second
+  factor: without it, the login page is never reached. Multica ticket **MEN-13**
+  (external OAuth IdP) can be re-evaluated against this.
+- Visitors reach only immich-public-proxy (`share.flefevre.fr`): shared albums,
+  read-only, behind the share password — never Immich's own login or API.

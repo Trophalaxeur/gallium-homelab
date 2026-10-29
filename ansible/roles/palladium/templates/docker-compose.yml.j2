@@ -1,0 +1,29 @@
+# Managed by Ansible (palladium role) — do not edit on the host.
+# immich-public-proxy (alangrainger/immich-public-proxy): serves Immich share
+# links to visitors without exposing Immich itself — shared albums only,
+# read-only, share password and expiry enforced, no API key. Hardening options
+# copied from the upstream docker-compose.yml.
+services:
+  immich-public-proxy:
+    image: alangrainger/immich-public-proxy:{{ immich_public_proxy_version }}@{{ immich_public_proxy_image_digest }}
+    container_name: immich-public-proxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:{{ palladium_ipp_port }}:3000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    environment:
+      PUBLIC_BASE_URL: https://{{ immich_share_domain }}
+      IMMICH_URL: https://{{ immich_domain }}
+    # The LXCs resolve through the Livebox, which knows only the public record
+    # of {{ immich_domain }} — that would send IPP back to palladium itself.
+    # Pinning the name keeps the TLS check against Immich's own certificate.
+    extra_hosts:
+      - "{{ immich_domain }}:{{ immich_ip }}"
+    healthcheck:
+      test: curl -sf -m 4 http://localhost:3000/share/healthcheck -o /dev/null || exit 1
+      start_period: 10s
+      timeout: 5s

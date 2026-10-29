@@ -89,6 +89,7 @@ physical HDD — two independent failures.
 | immich LXC OS (rootfs, incl. live Postgres) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | backup LXC OS (rclone/aws creds, crons) | INFRA | ✓ | ✓ | ✗ | ✗ |
 | hassium LXC OS (rootfs, incl. live recorder DB) | INFRA | ✓ | ✓ | ✗ | ✗ |
+| palladium LXC — none, stateless (rebuild = `terraform apply` + its play) | INFRA | ✗ | ✗ | ✗ | ✗ |
 | Config host PVE (bridge, storage, ACL) | INFRA | ✗ | ✗ | ✗ | ✗³ |
 | Thumbnails, transcoded video, logs | disposable | ✗ | ✗ | ✗ | ✗ |
 
