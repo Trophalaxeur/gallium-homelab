@@ -21,7 +21,11 @@ dns:
   bootstrap_dns:
     - 9.9.9.9
     - 1.1.1.1
-  ratelimit: 20
+  # Disabled: the limit applies per /24 (ratelimit_subnet_len_ipv4: 24), so the
+  # whole LAN shares one 20 q/s bucket and the excess is silently dropped
+  # (suspected cause of Teams slowdowns). Ports 53/853 are not forwarded on the
+  # Livebox, so only LAN clients can query.
+  ratelimit: 0
   refuse_any: true
   cache_enabled: true
   cache_size: 4194304

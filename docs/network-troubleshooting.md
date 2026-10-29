@@ -45,6 +45,29 @@ The NUC was powered off (or had silently dropped off the network — exact trigg
 
 No static DHCP reservation is configured for `.32`/`.53`/`.60` on the Livebox — IPs are presumed stable but not guaranteed. If a future outage comes back with different IPs after a power cycle, check the Livebox's DHCP lease table before assuming the hosts are still down.
 
+## Symptom: no internet on any device while gallium is down
+
+The Livebox hands out AdGuard (`192.168.1.53`) as both primary and secondary DNS, and IPv6 is off, so
+AdGuard is the only resolver on the LAN. When gallium is down (power loss, reboot, AdGuard redeploy),
+every name lookup fails: devices are still connected, but nothing loads.
+
+Quick check from any device: `ping 1.1.1.1` works while `ping example.com` fails.
+
+**Fallback** (about 2 minutes), only if the outage will last:
+
+1. On the Livebox DHCP page (the one with the primary/secondary DNS fields), set both DNS servers to
+   `192.168.1.1` (the Livebox's own resolver) and save.
+2. Disconnect and reconnect each device's Wi-Fi (unplug/replug wired ones) so it renews its DHCP lease
+   and picks up the new DNS.
+3. Internet works again; internal names (`*.lan`, `*.flefevre.fr` services) don't, since only AdGuard
+   knows them — and their LXCs are down anyway.
+
+**Revert** once gallium is back: set both DNS servers to `192.168.1.53` again and reconnect the
+devices. A device left on the Livebox DNS bypasses the ad filter and cannot resolve internal names.
+
+A router with a DNS forwarder that falls back automatically (AdGuard first, public resolver second)
+removes this manual step.
+
 ## Related gotchas hit during recovery
 
 - **`gallium` SSH is expected to fail** (`Permission denied (publickey,password)`) even when the host is fully up — no SSH key was ever authorized on the bare PVE host (see `homelab.md`). This is normal, not a sign the host is still down.

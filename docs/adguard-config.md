@@ -68,7 +68,7 @@ the merge sees a difference on every run.
 |---|---|---|
 | `cache_size` | `4194304` (4 MB) | In-memory DNS cache. Sufficient for a homelab. Can be raised to 16 MB without notable impact. |
 | `cache_optimistic` | `true` | Serves a cached response even after TTL expiry, then refreshes it in the background. Reduces perceived latency. |
-| `ratelimit` | `20` | Maximum DNS requests per second per client IP. Protects against DNS loops or buggy clients. Set to `0` to disable. |
+| `ratelimit` | `0` (disabled) | Queries per second AdGuard handles per **/24** (`ratelimit_subnet_len_ipv4` defaults to `24`), so the default `20` is one bucket shared by the whole LAN; the excess is silently dropped, with no reply. Disabled because ports 53/853 are not forwarded on the Livebox: only LAN clients can query. |
 | `refuse_any` | `true` | Rejects `ANY` query type, which is commonly abused for DNS amplification DDoS attacks. |
 
 ---
