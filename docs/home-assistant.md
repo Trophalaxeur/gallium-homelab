@@ -401,7 +401,7 @@ LXCs themselves do not use AdGuard at all: they resolve through the Livebox.
 From the internet, Home Assistant is reached through [palladium](palladium.md),
 which requires a client certificate. hassium's Caddy trusts palladium as a proxy
 (`trusted_proxies`), and Home Assistant must list it too: add `192.168.1.68` to
-*Trusted proxies*, next to `127.0.0.1`. Without it, the IP ban below would key on
+*Trusted proxies*, next to `127.0.0.1`. Without it, the IP ban above would key on
 palladium, and five failed logins from anywhere would lock out every remote
 client.
 

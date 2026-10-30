@@ -91,7 +91,7 @@ An excluded app on mobile data uses the operator's DNS, so it is the fourth row.
 | VMID | 108 |
 | RAM / disk / vCPU | 1 GB / 8 GB / 1 |
 | OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
-| Backup | none — stateless, rebuilt by `terraform apply` + one play |
+| Backup | none — stateless, rebuilt by `terraform apply` + `--limit adguard,palladium` (adguard pushes the certificate) |
 | Updates | `unattended-upgrades`, daily: Debian security + the Caddy repo. immich-public-proxy is a pinned image — watch its [releases](https://github.com/alangrainger/immich-public-proxy/releases) (GitHub → Watch → Custom → Releases) and bump `vars.yml` |
 
 ## How it is wired
@@ -130,12 +130,14 @@ palladium that the device is allowed; they come from a private CA:
 - **Upstreams**: palladium reaches hassium and immich by IP, with the SNI and
   Host of the real name, so their own certificates still verify. The LXCs
   resolve through the Livebox, which knows only the public records — a lookup
-  by name would loop back to palladium.
+  by name would loop back to palladium, which refuses it without a certificate.
+  No other LXC needs these names today.
 - **Client address**: palladium forwards the real address in
-  `X-Forwarded-For`. hassium's Caddy trusts palladium (`trusted_proxies`), and
-  so must Home Assistant itself (step 5 below). Otherwise Home Assistant sees
-  every remote request as coming from palladium, and five failed logins from
-  anywhere ban the gateway — that is, every remote client.
+  `X-Forwarded-For`. The Caddy of hassium and immich trust palladium
+  (`trusted_proxies`), and so must Home Assistant itself (step 5 below).
+  Otherwise Home Assistant sees every remote request as coming from palladium,
+  and five failed logins from anywhere ban the gateway — that is, every remote
+  client.
 - **Public DNS**: `hassium`, `photos` and `share` are A records at Online.net
   to the line's **fixed** IPv4 (free Orange Pro option, activated 2026-10-29),
   so there is no DynDNS client or third party to depend on. A CAA record per
@@ -158,16 +160,17 @@ the switch-over.
    ```
 
    Save `~/.local/share/gallium-mtls/client-ca.key` and its passphrase in
-   LastPass, as the secure note `gallium-mtls-client-ca`. Commit `client-ca.pem` and `client-certs/*.pem` — public halves
-   only. The play refuses to run without them.
+   LastPass, as the secure note `gallium-mtls-client-ca`. Commit `client-ca.pem`
+   and `client-certs/*.pem` — public halves only. The play refuses to run
+   without them.
 
-2. **Create the LXC**: `terraform plan -out palladium.tfplan`, review, then
+2. **Create the LXC**, from `terraform/`: `terraform plan -out palladium.tfplan`, review, then
    `terraform apply palladium.tfplan`. No bind-mount, so no root@pam step.
 
-3. **Deploy**:
+3. **Deploy**, from `ansible/`:
 
    ```bash
-   ansible-playbook playbook.yml --limit adguard,palladium,hassium,immich
+   ansible-playbook playbook.yml --limit adguard,palladium,hassium,immich --ask-vault-pass
    ```
 
    adguard for the DNS rewrites, the deploy keypair and the certificate;
@@ -228,8 +231,9 @@ the switch-over.
   upgrade that would prompt about the Ansible-managed `/etc/caddy/Caddyfile`
   is skipped, not forced — `/var/log/unattended-upgrades/` says so; upgrade it
   by hand (`apt install caddy`, keep the current file).
-- On 4G, **without** a certificate: `curl -sv https://hassium.flefevre.fr`
-  fails during the handshake (`certificate required`), same for `photos`.
+- From a phone hotspot on 4G, **without** a certificate:
+  `curl -sv https://hassium.flefevre.fr` fails with `alert certificate
+  required`, same for `photos`.
 - On 4G, **with** the certificate: the Home Assistant and Immich apps work,
   including the Immich background backup.
 - A share link opened in a private window asks for the share password and shows
@@ -277,7 +281,7 @@ Allowed today: `pixel-8` (Android phone) and `thallium` (Firefox).
    then once merged:
 
    ```bash
-   ansible-playbook playbook.yml --limit palladium
+   ansible-playbook playbook.yml --limit palladium --ask-vault-pass
    ```
 
 5. **Install** `~/.local/share/gallium-mtls/<device>.p12` on the device (next
@@ -332,8 +336,10 @@ Allowed today: `pixel-8` (Android phone) and `thallium` (Firefox).
   `ansible/roles/palladium/files/client-certs/<device>.pem`, commit, re-run
   `--limit palladium`. The certificate is refused from the next connection on.
 - **Renew**: device certificates last 2 years
-  (`openssl x509 -in <pem> -noout -enddate`). Re-issue with the same command;
-  the new `.pem` replaces the old one.
+  (`openssl x509 -in <pem> -noout -enddate`); the first ones expire on
+  2028-10-28. Follow [Add a device](#add-a-device) with the same name: the new
+  `.pem` replaces the old one, and the new `.p12` must be installed on the
+  device, because the key changes too.
 - **CA**: valid 10 years. Rotating it means re-issuing every device.
 
 ## Troubleshooting
