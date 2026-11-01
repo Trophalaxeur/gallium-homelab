@@ -119,6 +119,10 @@ Rewrites allow AdGuard to resolve custom local hostnames without a full DNS serv
 | `adguard.lan` / `adguard.flefevre.fr` | `192.168.1.53` | AdGuard Home web UI |
 | `thallium.lan` | `192.168.1.20` | Dev machine |
 | `neon.lan` / `neon.flefevre.fr` | `192.168.1.60` | Neon agents LXC (multica daemon + JeanMiPO — kanban on multica.ai) |
+| `palladium.lan` / `palladium.flefevre.fr` | `192.168.1.68` | Internet-facing gateway ([palladium.md](palladium.md)) |
+| `share.flefevre.fr` | `192.168.1.68` | Immich share links: the proxy runs on palladium, even from the LAN |
+| `hassium.flefevre.fr` | `192.168.1.66` | Home Assistant, direct on the LAN. Public DNS leads to palladium instead |
+| `photos.flefevre.fr` | `192.168.1.63` | Immich, direct on the LAN. Public DNS leads to palladium instead |
 
 The `.lan` suffix is a convention for non-routable local domains.
 Alternatives: `.home`, `.internal`.

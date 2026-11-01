@@ -80,9 +80,12 @@ tokens are stored in the vault (`vault_kuma_push_rclone_scaleway`,
 into the job scripts by the
 `backup` role — see [backup.md](backup.md#the-backup-jobs).
 
-**Optional active probes** (not yet created): HTTP checks on
-`https://photos.flefevre.fr/api/server/ping`, AdGuard, and PBS would give live
-service status alongside the heartbeats.
+**Optional active probes** (not yet created): HTTP checks on Immich
+(`/api/server/ping`), Home Assistant, AdGuard and PBS would give live service
+status alongside the heartbeats. This LXC resolves through the Livebox, so
+`photos.flefevre.fr` and `hassium.flefevre.fr` lead to
+[palladium](palladium.md), which refuses a client without a certificate: point
+the Kuma container's DNS at AdGuard first.
 
 ## Notifications — how alerts actually leave the box
 

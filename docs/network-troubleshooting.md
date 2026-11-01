@@ -43,7 +43,18 @@ The NUC was powered off (or had silently dropped off the network — exact trigg
 
 **Fix:** physically power-cycle the NUC. Once it finished booting, `gallium`/`adguard`/`neon` all came back within the diagnostic re-test (ARP went `FAILED` → `DELAY`/`STALE` → resolved).
 
-No static DHCP reservation is configured for `.32`/`.53`/`.60` on the Livebox — IPs are presumed stable but not guaranteed. If a future outage comes back with different IPs after a power cycle, check the Livebox's DHCP lease table before assuming the hosts are still down.
+The LXCs' addresses are static, set in Terraform (`ip_config`), so a power cycle cannot change them. Since 2026-10-29 the Livebox DHCP pool is `.100`–`.200`: it cannot hand a homelab address to another device. Static leases cover what sits on the LAN outside the LXCs: gallium (`.32`), thallium wired (`.20`) and the printer (`.29`). Any new device with a fixed address needs one too, or an address outside the pool.
+
+```
+192.168.1.x
+  .1          Livebox
+  .2 – .99    fixed addresses, never handed out by DHCP
+                .20  thallium (wired)   .29  printer     .32  gallium
+                .53  adguard            .60  neon        .62  pbs
+                .63  immich             .64  backup      .65  uptime
+                .66  hassium            .68  palladium
+  .100 – .200 Livebox DHCP pool: phones, Wi-Fi, guests, IoT
+```
 
 ## Symptom: no internet on any device while gallium is down
 
@@ -72,7 +83,3 @@ removes this manual step.
 
 - **`gallium` SSH is expected to fail** (`Permission denied (publickey,password)`) even when the host is fully up — no SSH key was ever authorized on the bare PVE host (see `homelab.md`). This is normal, not a sign the host is still down.
 - **`vault_gh_admin_token` can be expired/deleted** — per [recovery.md](recovery.md#neon-vault-secrets-lost), this PAT is documented as "used once for deploy key registration; can be deleted after Phase 1." If you re-run `ansible-playbook --tags phase1` later (e.g. after renaming a repo in `deploy_key_repos`), the "List/Register deploy keys" tasks will fail with `401 Unauthorized` if the token was deleted. Either follow the recovery.md procedure to mint a new one, or — faster for a one-off — register the deploy key manually with an already-authenticated `gh` CLI session and resume the playbook with `--start-at-task "Clone <repo> to context repos"` to skip past the GitHub API tasks.
-
-## Future improvement
-
-Configure static DHCP reservations for `gallium`/`adguard`/`neon` on the Livebox, so a power cycle can't silently reassign their IPs and turn a simple "host was off" outage into an IP-hunting exercise.
