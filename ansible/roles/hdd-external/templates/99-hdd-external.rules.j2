@@ -1,0 +1,4 @@
+# Managed by Ansible (hdd-external role).
+# Match on the filesystem UUID, not sdX: the name changes at every re-attach.
+# SYSTEMD_WANTS (not RUN+=) so the long-ish heal is not killed by udev's timeout.
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_FS_UUID}=="{{ backup_hdd_uuid }}", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hdd-external-heal.service"

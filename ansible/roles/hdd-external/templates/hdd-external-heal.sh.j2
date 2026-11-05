@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Managed by Ansible (hdd-external role). Started by udev when the backup HDD
+# (UUID {{ backup_hdd_uuid }}) re-appears, whatever its sdX name.
+#
+# 1. Remount it on the host (fstab entry, nofail so boot never blocks on it).
+# 2. A bind-mount into an LXC is not refreshed by a host remount: the LXC keeps
+#    the dead mount (I/O errors) until it restarts. Restart LXC {{ backup_lxc_vmid }}
+#    only if it cannot write to the disk — the container only runs backup jobs,
+#    and rclone resumes on the next run.
+set -uo pipefail
+
+MNT="{{ backup_hdd_host_mount }}"
+CT_MNT="{{ backup_hdd_mount }}"
+VMID="{{ backup_lxc_vmid }}"
+ADMIN="{{ backup_admin_email }}"
+CANARY=".heal-canary"
+actions=()
+
+writable() { touch "$1/$CANARY" 2>/dev/null && rm -f "$1/$CANARY"; }
+
+# The device node can show up before the filesystem is readable.
+sleep 5
+
+if ! mountpoint -q "$MNT" || ! writable "$MNT"; then
+  # Lazy unmount clears a stale mount left by the vanished device.
+  mountpoint -q "$MNT" && umount -l "$MNT"
+  if mount "$MNT" && writable "$MNT"; then
+    actions+=("remounted $MNT on the host")
+  else
+    printf 'HDD re-attached but %s could not be remounted on %s.\n' "$MNT" "$(hostname)" \
+      | mail -s "[gallium] backup HDD remount FAILED" "$ADMIN" || true
+    exit 1
+  fi
+fi
+
+if pct status "$VMID" | grep -q running \
+  && ! pct exec "$VMID" -- sh -c "touch $CT_MNT/$CANARY && rm -f $CT_MNT/$CANARY" 2>/dev/null; then
+  pct reboot "$VMID" && actions+=("restarted LXC $VMID (stale bind-mount)")
+fi
+
+if [[ -n "${actions[*]:-}" ]]; then
+  { printf 'Backup HDD re-attached on %s:\n' "$(hostname)"; printf -- '- %s\n' "${actions[@]}"; } \
+    | mail -s "[gallium] backup HDD re-attached, healed" "$ADMIN" || true
+fi

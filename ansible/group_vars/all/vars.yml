@@ -52,6 +52,10 @@ backup_hdd_mount: "/mnt/hdd"
 # backup LXC's mapped root (100000) so the unprivileged LXC can write to it —
 # same fix as the immich-photos dataset (see the proxmox play in playbook.yml).
 backup_hdd_host_mount: "/mnt/hdd-external"
+# Filesystem UUID of the HDD's partition (stable across the sdX renames the USB
+# disk goes through at each re-attach) and the VMID of the LXC that bind-mounts it.
+backup_hdd_uuid: "3d93019d-7594-4b76-8c96-779adf4055d1"
+backup_lxc_vmid: 105
 
 # Scaleway Object Storage (bucket bootstrapped by
 # scripts/scaleway-bucket-bootstrap.sh — Object Lock Compliance + SSE-ONE).

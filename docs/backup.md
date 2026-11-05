@@ -211,6 +211,24 @@ Two independent channels, because "email on error" is blind to a **dead cron**
 > attached as default-enabled, so a late/failed push notifies `admin@flefevre.fr`.
 > Setup details in [uptime-kuma.md](uptime-kuma.md#notifications--how-alerts-actually-leave-the-box).
 
+### USB disk drops — self-healing
+
+The external HDD sits in a USB enclosure that gets switched off from time to time
+(seen 2026-10-27, 28, 29; SMART stays clean and the kernel logs a plain
+`USB disconnect`). When it is switched back on it re-enumerates under a new `sdX`
+name, but nothing remounts it, and the backup LXC keeps a **dead bind-mount** that
+still passes `mountpoint -q` — rclone then fails with I/O errors.
+
+- **Remount:** the `hdd-external` Ansible role installs a udev rule matching the
+  partition **UUID** (not `sdX`). On re-attach it starts `hdd-external-heal.service`,
+  which remounts `/mnt/hdd-external` and, only if LXC 105 can no longer write to its
+  `/mnt/hdd`, restarts that LXC (a bind-mount is not refreshed by a host remount).
+  It mails `admin@flefevre.fr` whenever it had to act.
+- **Detection:** `backup-rclone-hdd.sh` now proves the disk is writable (canary file),
+  not just a mountpoint, and aborts with a clear mail instead of a million log lines.
+- **Limit:** this heals a *re-attach*. If the disk stays off, `rclone-hdd` keeps
+  pushing `down` to Kuma — fix the cable/enclosure.
+
 PBS ships a verify/prune capability; scheduled verify + GC are not yet enabled
 (low volume today). A **daily digest email** aggregating PBS/ZFS/Scaleway/HDD
 status is designed but deferred.

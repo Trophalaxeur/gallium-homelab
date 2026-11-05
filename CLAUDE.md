@@ -14,6 +14,20 @@ This applies to nginx, Caddy, HAProxy, and any other application layer. If a ser
 be reachable via a domain, provision a dedicated LXC and update the AdGuard DNS rewrite to
 point to that LXC's IP.
 
+## Ansible and the vault
+
+`group_vars/all/` loads an encrypted vault and `ansible.cfg` configures no vault password, so every
+`ansible-playbook` / `ansible-lint` run that loads variables fails without vault access
+(`Attempting to decrypt but no vault secrets found`).
+
+**Always ask the user how to provide vault access before any ansible command.** Do not run one
+blind, and do not guess a flag or path.
+
+- Never read `.vault_pass` or any decrypted vault content (the user decrypts, not Claude).
+- Every ansible command handed to the user must include the vault option (`--ask-vault-pass`, or
+  `--vault-password-file <path>` once the user has said which), never the bare command.
+- `--syntax-check` and `--check --diff` need the vault too.
+
 ## New VM / LXC checklist
 
 Each time a new VM or LXC is added to the homelab, apply these steps before considering it done:

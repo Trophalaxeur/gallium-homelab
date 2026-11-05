@@ -1,0 +1,8 @@
+# Managed by Ansible (hdd-external role).
+[Unit]
+Description=Remount the external backup HDD and refresh LXC {{ backup_lxc_vmid }}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hdd-external-heal.sh
+TimeoutStartSec=300
