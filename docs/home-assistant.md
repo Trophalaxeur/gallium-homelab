@@ -27,7 +27,7 @@ none of them needs the Supervisor:
 
 | Device | Path | Needs an app? |
 |---|---|---|
-| Thermor Allure 4 towel rail (`LPOM TD1W`, built-in Wi-Fi) | Community integration [gduteil/cozytouch](https://github.com/gduteil/cozytouch) via HACS — **cloud only**. Not Overkiz: Wi-Fi-native Cozytouch devices live on Atlantic's Magellan API (`apis.groupe-atlantic.com`), which Overkiz does not cover. Local fallback: a fil-pilote module | no |
+| Thermor Allure 4 towel rail (`LPOM TD1W`, built-in Wi-Fi) | Community integration [gduteil/cozytouch](https://github.com/gduteil/cozytouch), pinned by Ansible — **cloud only**. Not Overkiz: Wi-Fi-native Cozytouch devices live on Atlantic's Magellan API (`apis.groupe-atlantic.com`), which Overkiz does not cover. Local fallback: a fil-pilote module. See [the plan](thermor-allure-4-plan.md) | no |
 | Shelly plugs and switches | local integration, no cloud account | no |
 | Solar inverter | local API or Modbus TCP over the LAN | no |
 | Wallbox / EV | local API or vendor cloud | no |
