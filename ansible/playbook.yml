@@ -451,6 +451,10 @@
         # 2026-10-18 — stating it changes nothing on the live system.
         mode: "0755"
 
+  # Remount + restart the backup LXC when the USB disk drops and comes back.
+  roles:
+    - hdd-external
+
 # Uptime Kuma (LXC 106) — self-hosted heartbeat monitor + active service probes.
 # Deployed BEFORE the backup play so the push endpoint exists when the backup
 # jobs fire. No vault vars: Kuma is configured through its own UI (create the 3

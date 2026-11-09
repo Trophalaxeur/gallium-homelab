@@ -23,9 +23,12 @@ FROM="{{ smtp_from_backup | default('backup@flefevre.fr') }}"
 exec >>"$LOG" 2>&1
 echo "===== $(date -Is) rclone → HDD ====="
 
-if ! mountpoint -q "$HDD"; then
-  echo "ABORT — $HDD is not a mountpoint (HDD unplugged/unmounted)"
-  printf 'HDD backup aborted on %s: %s is not mounted.\nNo data written.\n' \
+# mountpoint alone is not enough: after a USB drop the LXC keeps a dead mount
+# that still counts as a mountpoint (2026-10-27 outage, rclone then spewed I/O
+# errors). Prove the disk is writable.
+if ! mountpoint -q "$HDD" || ! { touch "$HDD/.canary" && rm -f "$HDD/.canary"; } 2>/dev/null; then
+  echo "ABORT — $HDD is not a mountpoint or not writable (HDD unplugged / stale mount)"
+  printf 'HDD backup aborted on %s: %s is not mounted or not writable (unplugged or stale mount).\nNo data written.\n' \
     "$(hostname)" "$HDD" | mail -r "$FROM" -s "[backup] HDD not mounted — backup skipped" "$ADMIN" || true
   curl -fsS -m 15 -G "$KUMA_URL" \
     --data-urlencode "status=down" --data-urlencode "msg=HDD not mounted" >/dev/null || true

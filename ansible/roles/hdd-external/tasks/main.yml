@@ -1,0 +1,30 @@
+---
+# Self-healing for the USB backup HDD on the Proxmox host. The disk drops off
+# the bus now and then (2026-10-27/28/29) and re-enumerates under a new sdX; fstab
+# only mounts at boot, and the backup LXC keeps a dead bind-mount until restarted.
+# udev fires on re-attach -> remount by UUID -> restart the LXC if it lost the disk.
+- name: Deploy the HDD heal script
+  ansible.builtin.template:
+    src: hdd-external-heal.sh.j2
+    dest: /usr/local/sbin/hdd-external-heal.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy the heal systemd unit
+  ansible.builtin.template:
+    src: hdd-external-heal.service.j2
+    dest: /etc/systemd/system/hdd-external-heal.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Deploy the udev rule triggering the heal on re-attach
+  ansible.builtin.template:
+    src: 99-hdd-external.rules.j2
+    dest: /etc/udev/rules.d/99-hdd-external.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload udev
