@@ -11,24 +11,48 @@
     state: directory
     mode: "0755"
 
-- name: Download AdGuard Home
-  ansible.builtin.get_url:
-    url: "https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
-    dest: /tmp/adguard-home.tar.gz
-    mode: "0644"
+# Read-only, so it also runs under --check. A missing binary (first install)
+# is not an error: the version just reads as empty and the install block runs.
+# Output looks like "AdGuard Home, version v0.107.79".
+- name: Read the installed AdGuard Home version
+  ansible.builtin.command: /opt/AdGuardHome/AdGuardHome --version
+  register: adguard_home_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
-- name: Extract AdGuard Home binary
-  ansible.builtin.unarchive:
-    src: /tmp/adguard-home.tar.gz
-    dest: /tmp
-    remote_src: true
+# Only when the installed version differs from the pinned one: no download and
+# no binary swap on a steady-state run. The tarball is verified against the
+# pinned sha256. Under --check the download is only simulated (nothing lands in
+# /tmp), so the extract and install steps are skipped rather than failed.
+- name: Install the pinned AdGuard Home binary
+  when: >-
+    (adguard_home_installed.stdout | default('') | trim).split(' ') | last
+    != adguard_home_version
+  block:
+    - name: Download AdGuard Home {{ adguard_home_version }}
+      ansible.builtin.get_url:
+        url: "https://github.com/AdguardTeam/AdGuardHome/releases/download/{{ adguard_home_version }}/AdGuardHome_linux_amd64.tar.gz"
+        dest: "/tmp/adguard-home-{{ adguard_home_version }}.tar.gz"
+        checksum: "sha256:{{ adguard_home_sha256 }}"
+        mode: "0644"
 
-- name: Install binary
-  ansible.builtin.copy:
-    src: /tmp/AdGuardHome/AdGuardHome
-    dest: /opt/AdGuardHome/AdGuardHome
-    mode: "0755"
-    remote_src: true
+    - name: Extract AdGuard Home binary
+      ansible.builtin.unarchive:
+        src: "/tmp/adguard-home-{{ adguard_home_version }}.tar.gz"
+        dest: /tmp
+        remote_src: true
+      when: not ansible_check_mode
+
+    # copy writes a temp file then renames, so replacing the running binary is safe.
+    - name: Install binary
+      ansible.builtin.copy:
+        src: /tmp/AdGuardHome/AdGuardHome
+        dest: /opt/AdGuardHome/AdGuardHome
+        mode: "0755"
+        remote_src: true
+      when: not ansible_check_mode
+      notify: Restart adguardhome
 
 # Certificates are provisioned BEFORE deploying config + starting service,
 # so AdGuard finds valid TLS material on first start (no degraded HTTP-only run).

@@ -10,6 +10,14 @@ printer_ip: "192.168.1.29"       # Brother printer, DHCP-reserved on Livebox (MA
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
+# AdGuard Home binary, pinned like the container images: version AND sha256 of
+# the linux_amd64 tarball. Bump both together — check
+# https://github.com/AdguardTeam/AdGuardHome/releases, then take the hash from
+# that release's checksums.txt (or `sha256sum` the downloaded tarball).
+# The play installs it only when the installed version differs, so a UI
+# self-update is reverted on the next run: bump here instead.
+adguard_home_version: "v0.107.79"
+adguard_home_sha256: "c48f4a43000665484c5ec28177de11a004759b620dae8f77b2aabefc9ef3687f"
 
 # --- neon ---
 smtp_host: "smtp.gmail.com"
