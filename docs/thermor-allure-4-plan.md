@@ -25,7 +25,8 @@ cover. The community integration talks to that API and maps `TD1` to a
 towel rack: climate entity, room temperature, presets (boost included when
 the device reports capability 100505), override (*dérogation*), weekly
 program as a calendar, plus its own schedule card. Cloud only: there is no
-local API, and Thermor says so publicly.
+local API (none documented; Home Assistant's Overkiz page lists no Atlantic or
+Thermor gateway among its local-API hubs).
 
 **Installation: pinned by Ansible, not HACS (recommended).** Everything in
 this homelab is pinned by version and digest (`homeassistant_image`,
@@ -52,13 +53,21 @@ other community integrations pile up later and HACS becomes worth it.
    paired, reachable from outside the home Wi-Fi (switch the phone to 4G and
    change the setpoint). The integration uses the **same account**:
    email + password, no MFA support.
+
+   **Also check there is no Cozytouch bridge in the house** (no "Bridge" or
+   "Pass Cozytouch" box in the app's device list; the rail pairs over Wi-Fi
+   itself). Thermor's pages are ambiguous on whether the Allure 4 is Wi-Fi
+   native or needs a bridge, and nothing online mentions `TD1W`/`LPOM`. If a
+   bridge turns out to be involved, the device may sit on the Overkiz side
+   and this plan's premise must be re-checked before going on.
 2. **Home Assistant is recent enough.** `hacs.json` requires ≥ 2025.12.0;
    `homeassistant_version` is `2026.10.2`. OK.
 3. **hassium reaches Atlantic's cloud.**
    ```bash
-   ssh root@hassium.lan 'curl -sS -o /dev/null -w "%{http_code}\n" https://apis.groupe-atlantic.com/'
+   ssh root@hassium.lan 'python3 -c "import urllib.request as u; print(u.urlopen(\"https://apis.groupe-atlantic.com/\", timeout=10).status)"'
    ```
-   Any HTTP code (even 404) is fine; a timeout or DNS error is not.
+   `curl` is not installed on hassium (Debian minimal LXC), hence python3.
+   Any HTTP code is fine; a timeout or DNS error is not. Checked 2026-11-09: `200`.
 4. **Choose the version to pin.** On 2026-11-07 the repository has:
 
    | Ref | Commit | Notes |
@@ -68,11 +77,15 @@ other community integrations pile up later and HACS becomes worth it.
    | `main` | `1cdec93` | `manifest.json` says `2026.10.0`; untagged |
 
    Recommendation: take the newest **non-beta** CalVer tag if one exists by then;
-   otherwise `2026.10.1b1`, the oldest ref that has the schedule card, the
-   calendar and the single account entry. Avoid `1.4`: its config entry
-   format is migrated by later versions (`migrate_1_4.py`), so starting there
-   means doing a migration for nothing. Pin the **full** 40-character SHA (for an
-   annotated tag, the commit it points to: `git ls-remote <url> 'refs/tags/<tag>^{}'`).
+   otherwise `main` at `1cdec93`. It is 10 commits ahead of `2026.10.1b1`,
+   including a fix for the warnings recent Home Assistant releases log about
+   the integration (`fc73518`) and one restoring the heating status of
+   heaters (`bdfbd56`). Both refs have the schedule card, the calendar and the
+   single account entry. Avoid `1.4`: its config entry format is migrated by
+   later versions (`migrate_1_4.py`), so starting there means doing a
+   migration for nothing. Pin the **full** 40-character SHA. The beta tag is
+   lightweight, so `git ls-remote <url> refs/tags/<tag>` already prints the
+   commit; only an annotated tag needs the `^{}` form.
 
 *Done when*: app works off-LAN, curl answers, SHA chosen.
 
@@ -89,7 +102,7 @@ Next to `homeassistant_version`:
 # towel rail. Pinned by full commit SHA: content-addressed, unlike a tag or a
 # GitHub tarball. Bump = new SHA + redeploy. See docs/thermor-allure-4-plan.md.
 cozytouch_repo: "https://github.com/gduteil/cozytouch.git"
-cozytouch_version: "2026.10.1b1"          # for humans only
+cozytouch_version: "main@1cdec93"          # for humans only (tag if a stable one exists)
 cozytouch_commit: "<full 40-char SHA>"
 ```
 
@@ -120,15 +133,14 @@ directory and HA logs *Integration cozytouch not found*):
     repo: "{{ cozytouch_repo }}"
     dest: "{{ homeassistant_vendor_dir }}/cozytouch"
     version: "{{ cozytouch_commit }}"
-    depth: 1
     force: true
-  register: cozytouch_checkout
   notify: Restart home assistant
 ```
 
-> `depth: 1` combined with a SHA `version` works only when the SHA is the tip of
-> a branch or a tag. If the module complains, drop `depth`: the repository is
-> small.
+> No `depth`: with a bare SHA as `version`, Ansible ignores it (warning
+> *"Shallow clones are only available for HEAD, branches, tags or in
+> combination with refspec"*) and does a full clone anyway. Tested with
+> ansible-core 2.22: checkout at the SHA works. The repository is small.
 
 ### 1.4 `roles/home-assistant/templates/docker-compose.yml.j2`
 
@@ -144,8 +156,9 @@ Under `homeassistant.volumes`:
 ### 1.5 Deploy and check
 
 ```bash
-ansible-playbook playbook.yml --limit adguard,hassium --check --diff   # review
-ansible-playbook playbook.yml --limit adguard,hassium
+# --ask-vault-pass (or --vault-password-file <path>): group_vars/all loads the vault
+ansible-playbook playbook.yml --limit adguard,hassium --ask-vault-pass --check --diff   # review
+ansible-playbook playbook.yml --limit adguard,hassium --ask-vault-pass
 ssh root@hassium.lan 'docker exec homeassistant ls /config/custom_components/cozytouch/manifest.json'
 ssh root@hassium.lan 'docker logs homeassistant 2>&1 | grep -i "custom integration cozytouch"'
 ```
@@ -250,13 +263,17 @@ repository `hassium-automation`, deployed by the existing copy → `check_config
 ### 4.1 One-time UI step: the schedule card resource
 
 The integration serves its card at `/cozytouch/cozytouch-schedule-card.js`,
-but Home Assistant must be told to load it: **Settings → Dashboards → ⋮ →
+but Home Assistant must be told to load it. The *Resources* menu only shows
+with **Advanced mode** on (user profile). Then **Settings → Dashboards → ⋮ →
 Resources → Add**, URL `/cozytouch/cozytouch-schedule-card.js`, type
 *JavaScript module*. Then refresh the browser (Ctrl+F5); the HA companion app
 needs *Settings → Companion app → Debugging → Reset frontend cache*.
 
 That lives in `.storage`. Add it to the *UI-side choices to redo* table in
-`docs/home-assistant.md`.
+`docs/home-assistant.md`. (Declaring resources in YAML needs
+`resource_mode: yaml`, which turns the UI resource manager off; not worth it
+for one card.) After editing the dashboard file later, use the dashboard's
+**⋮ → Refresh**: a browser reload does not always pick the change up.
 
 ### 4.2 Private repo — `configuration.yaml`
 
@@ -355,8 +372,11 @@ views:
           - entity: climate.seche_serviettes
 ```
 
-**Variant 2: boost is a switch** (`switch.seche_serviettes_boost` exists,
-no `boost` preset). Replace the `horizontal-stack` and the `conditional` with:
+**Variant 2: boost as a switch.** The integration derives the `boost`
+preset and the `powerful_mode` switch from the same capability (100505), so
+if the device reports it you get both: variants 1 and 2 are a matter of
+taste (a toggle is simpler, the preset keeps the thermostat card in sync). Use
+this one if you prefer the toggle or if the preset is missing. Replace the `horizontal-stack` and the `conditional` with:
 
 ```yaml
       - type: tile
