@@ -205,7 +205,7 @@ This lives in `.storage` (config entry, entity registry). Git cannot own it.
    | `hvac_modes` | same | `off`, `heat`; `min_temp` 7, `max_temp` 28 |
    | `current_temperature` populated? | same | Yes (19.1 °C), `hvac_action: idle` |
    | Override entities present? | device page | Select (1 h to 24 h), `Dérogation en cours` and `temps restant` are **sensors**; no activation switch (use the `override` preset) |
-   | Any *unnamed capability* repair issue? | Settings → Repairs | To check by hand |
+   | Any *unnamed capability* repair issue? | Settings → Repairs | One warning: 2 unnamed capabilities (`371`, `103117`), so they do not reach HA. Harmless (a mapping gap, not a fault); upstream PR #198 names `103117` (water heaters). Dismiss it, or open an issue with the diagnostics if a missing value matters |
    | Calendar | device page | Present (`Programme Chauffage`, heating program) |
    | Consumption | device page | A `Consommation` energy sensor exists |
 
