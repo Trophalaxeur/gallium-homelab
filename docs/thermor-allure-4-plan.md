@@ -227,8 +227,8 @@ report.
 
 | # | Need | Action in HA | Expected in the app | Observed / delay |
 |---|---|---|---|---|
-| 1 | Status | Read `current_temperature`, `hvac_action` | Same temperature (±0.5 °C) | |
-| 2a | Read the program | Open `calendar.seche_serviettes_chauffage` | Same slots as the app | |
+| 1 | Status | Read `current_temperature`, `hvac_action` | Same temperature (±0.5 °C) | **OK** 2026-11-09: app 19 °C, HA 19.1 °C, `hvac_action: idle` |
+| 2a | Read the program | Open `calendar.seche_serviettes_chauffage` | Same slots as the app | **OK** 2026-11-09: `cozytouch.get_schedule` = the app's week (weekdays 15.5 / 22 at 05:45 / 15.5 at 08:00 / 19 at 18:00 / 15.5 at 21:00; weekend 22 at 06:15, back to 15.5 at 09:00) |
 | 2b | Change the program | Move a slot with the schedule card (phase 4) or `cozytouch.set_schedule` | Slot moved in the app | |
 | 2c | Program change from the app | Edit a slot in the app | Calendar updated after ≤ 1 poll | |
 | 3a | Boost (start) | Boost tile (phase 4) or `switch.seche_serviettes_boost` | App shows boost running; note setpoint and duration | |
@@ -376,10 +376,11 @@ views:
           - entity: switch.seche_serviettes_boost
 ```
 
-What the device does *not* tell us yet, to measure in phase 3: the boost
-duration and setpoint, and which setpoint the override applies. The boost
-duration entities (`Durée du boost`, `Heure de fin du boost`) are disabled by
-default; enabling them on the device page helps.
+Measured: the boost lasts **20 min** (`Durée du boost`, a disabled-by-default
+entity, enabled on the device page). `Heure de fin du boost` holds the end of
+the last boost as an epoch in seconds, shown as a duration: cosmetic, ignore
+it. Still to measure in phase 3: the boost setpoint, and which setpoint the
+override applies.
 
 ### 4.4 This repo — `roles/home-assistant/defaults/main.yml`
 
