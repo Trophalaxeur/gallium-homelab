@@ -3,7 +3,8 @@ title: "Thermor Allure 4 — integration plan"
 description: "Step-by-step plan to bring the Thermor Allure 4 towel rail (LPOM TD1W) into Home Assistant through the community Cozytouch integration, pinned by Ansible, with a Git-owned dashboard and a boost button."
 ---
 
-Plan for the bathroom towel rail. Status: **not started**. Each phase ends
+Plan for the bathroom towel rail. Status: phases 0 and 1 done (2026-11-09),
+phase 2 in progress. Each phase ends
 with an explicit *done when* so it can be ticked off on its own. Automations
 are out of scope here, deliberately.
 
@@ -22,8 +23,8 @@ Overkiz.** Atlantic runs two clouds behind the Cozytouch brand. The
 Wi-Fi-native devices (no Cozytouch bridge) live on the *Magellan* API
 (`apis.groupe-atlantic.com`), which the core Overkiz integration does not
 cover. The community integration talks to that API and maps `TD1` to a
-towel rack: climate entity, room temperature, presets (boost included when
-the device reports capability 100505), override (*dérogation*), weekly
+towel rack: climate entity, room temperature, presets (`basic`, `prog`, `override` on
+this device; a `boost` preset only on devices that expose one), a boost switch, override (*dérogation*), weekly
 program as a calendar, plus its own schedule card. Cloud only: there is no
 local API (none documented; Home Assistant's Overkiz page lists no Atlantic or
 Thermor gateway among its local-API hubs).
@@ -182,26 +183,31 @@ This lives in `.storage` (config entry, entity registry). Git cannot own it.
 3. **Device page**: area *Salle de bain*; rename the device *Sèche-serviettes*.
 4. **Stabilize the entity ids** (the dashboard references them). Rename to:
 
-   | Entity | Target id |
+   | Entity (current id, after the Cozytouch add) | Target id |
    |---|---|
-   | climate | `climate.seche_serviettes` |
-   | heating calendar | `calendar.seche_serviettes_chauffage` |
-   | boost switch (`powerful_mode`), if present | `switch.seche_serviettes_boost` |
-   | override activation (`override_setpoint_activation`), if present | `switch.seche_serviettes_derogation` |
-   | override duration (`override_total_time`), if present | `select.seche_serviettes_derogation_duree` |
-   | override remaining (`override_remain_time`), if present | `sensor.seche_serviettes_derogation_restant` |
+   | `climate.allure_4_0750w_carbone_chene_chauffage` | `climate.seche_serviettes` |
+   | `calendar.allure_4_0750w_carbone_chene_programme_chauffage` | `calendar.seche_serviettes_chauffage` |
+   | `switch.allure_4_0750w_carbone_chene_mode_boost` | `switch.seche_serviettes_boost` |
+   | `select.allure_4_0750w_carbone_chene_derogation_duree` | `select.seche_serviettes_derogation_duree` |
+   | `sensor.allure_4_0750w_carbone_chene_derogation_en_cours` | `sensor.seche_serviettes_derogation_en_cours` |
+   | `sensor.allure_4_0750w_carbone_chene_derogation_temps_restant` | `sensor.seche_serviettes_derogation_restant` |
+
+   Renaming an entity id does not rename the device (and the reverse), so
+   the two renames are independent.
 
 5. **Inventory what the device actually exposes.** Fill in this table; it
    decides the dashboard variant in phase 4:
 
-   | Question | How to check | Answer |
+   | Question | How to check | Answer (2026-11-09, via ha-mcp) |
    |---|---|---|
-   | `boost` in the climate's `preset_modes`? | Developer tools → States → `climate.seche_serviettes` | |
-   | `prog` / `basic` presets? | same | |
-   | `hvac_modes` | same (expected: `off`, `heat`) | |
-   | `current_temperature` populated? | same | |
-   | Override entities present? | device page | |
-   | Any *unnamed capability* repair issue? | Settings → Repairs | |
+   | `boost` in the climate's `preset_modes`? | Developer tools → States | **No.** Boost is the `Mode Boost` switch |
+   | `prog` / `basic` presets? | same | Yes: `preset_modes` = `basic`, `prog`, `override` |
+   | `hvac_modes` | same | `off`, `heat`; `min_temp` 7, `max_temp` 28 |
+   | `current_temperature` populated? | same | Yes (19.1 °C), `hvac_action: idle` |
+   | Override entities present? | device page | Select (1 h to 24 h), `Dérogation en cours` and `temps restant` are **sensors**; no activation switch (use the `override` preset) |
+   | Any *unnamed capability* repair issue? | Settings → Repairs | To check by hand |
+   | Calendar | device page | Present (`Programme Chauffage`, heating program) |
+   | Consumption | device page | A `Consommation` energy sensor exists |
 
    ha-mcp can produce the same inventory in one go (*"list every entity of the
    Cozytouch device and the climate's attributes"*).
@@ -225,9 +231,10 @@ report.
 | 2a | Read the program | Open `calendar.seche_serviettes_chauffage` | Same slots as the app | |
 | 2b | Change the program | Move a slot with the schedule card (phase 4) or `cozytouch.set_schedule` | Slot moved in the app | |
 | 2c | Program change from the app | Edit a slot in the app | Calendar updated after ≤ 1 poll | |
-| 3a | Boost (start) | Boost button (phase 4) | App shows boost running | |
-| 3b | Boost (stop) | Stop button | Boost stopped in the app | |
-| 3c | Boost (end on its own) | Let it run out | HA goes back to `none` / `prog` | |
+| 3a | Boost (start) | Boost tile (phase 4) or `switch.seche_serviettes_boost` | App shows boost running; note setpoint and duration | |
+| 3b | Boost (stop) | Same switch, off | Boost stopped in the app | |
+| 3c | Boost (end on its own) | Let it run out | Switch goes back to `off`, climate to `prog` | |
+| 3d | Override | Pick a 1 h duration, set the climate to the `override` preset | App shows the dérogation; `Dérogation en cours` turns on, `temps restant` counts down | |
 | 4 | Robustness | `docker restart homeassistant` while the program runs | Device keeps its program (it holds it itself) | |
 
 `cozytouch.set_schedule` test call (Developer tools → Actions), **restore the
@@ -252,7 +259,7 @@ data:
 Rules from the integration: max 10 slots per day, the first at `00:00`,
 whole degrees only.
 
-*Done when*: rows 1 to 3 pass. Row 4 is informative.
+*Done when*: rows 1 to 3c pass. Rows 3d and 4 are informative.
 
 ## Phase 4 — dashboard with a boost button
 
@@ -295,8 +302,12 @@ lovelace:
 Flat at the root on purpose: the role copies files one by one into a staging
 directory and does not create sub-directories.
 
-**Variant 1: the climate exposes the `boost` preset** (most likely; the button
-goes through `climate.set_preset_mode`):
+**Measured on this device (2026-11-09): only the switch variant applies.** The
+climate exposes the presets `basic`, `prog` and `override`, with **no `boost`
+preset**; boost is the `Mode Boost` switch (`switch.seche_serviettes_boost`).
+The override (*dérogation*) is started through the `override` preset, its
+duration comes from a select, and `Dérogation en cours` is a read-only sensor
+(there is no activation switch). The dashboard below follows that.
 
 ```yaml
 title: Salle de bain
@@ -305,7 +316,8 @@ views:
     path: seche-serviettes
     icon: mdi:radiator
     cards:
-      # Status: room temperature, setpoint, mode, preset selector.
+      # Status: room temperature, setpoint, mode, and the preset selector
+      # (basic = manual setpoint, prog = weekly program, override = dérogation).
       - type: thermostat
         entity: climate.seche_serviettes
         name: Sèche-serviettes
@@ -315,49 +327,40 @@ views:
           - type: climate-preset-modes
             style: dropdown
 
-      # Exceptional run. Start is confirmed: 750 W for a while is not free.
-      - type: horizontal-stack
-        cards:
-          - type: button
-            name: Boost
-            icon: mdi:fire
-            show_state: false
-            tap_action:
-              action: perform-action
-              perform_action: climate.set_preset_mode
-              target:
-                entity_id: climate.seche_serviettes
-              data:
-                preset_mode: boost
-              confirmation:
-                text: Lancer un boost du sèche-serviettes ?
-          - type: button
-            name: Stop
-            icon: mdi:fire-off
-            show_state: false
-            tap_action:
-              action: perform-action
-              perform_action: climate.set_preset_mode
-              target:
-                entity_id: climate.seche_serviettes
-              data:
-                # "none" stops the boost; then the device's program applies.
-                # If the inventory showed a "prog" preset, use it here instead
-                # so the weekly program is resumed explicitly.
-                preset_mode: none
+      # Exceptional run. A toggle: tapping it starts or stops the boost, and
+      # both are confirmed: 750 W for a while is not free.
+      - type: tile
+        entity: switch.seche_serviettes_boost
+        name: Boost
+        icon: mdi:fire
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Basculer le boost du sèche-serviettes ?
 
       # Only shown while the boost runs.
       - type: conditional
         conditions:
           - condition: state
-            entity: climate.seche_serviettes
-            attribute: preset_mode
-            state: boost
+            entity: switch.seche_serviettes_boost
+            state: "on"
         card:
           type: markdown
           content: >-
             🔥 **Boost en cours**: consigne
             {{ state_attr('climate.seche_serviettes', 'temperature') }} °C
+
+      # Override: pick the duration here, start it with the `override` preset
+      # of the thermostat card above.
+      - type: entities
+        title: Dérogation
+        entities:
+          - entity: select.seche_serviettes_derogation_duree
+            name: Durée
+          - entity: sensor.seche_serviettes_derogation_en_cours
+            name: En cours
+          - entity: sensor.seche_serviettes_derogation_restant
+            name: Restant
 
       # Weekly program, editable (cozytouch.set_schedule under the hood).
       - type: custom:cozytouch-schedule-card
@@ -370,42 +373,13 @@ views:
         hours_to_show: 24
         entities:
           - entity: climate.seche_serviettes
+          - entity: switch.seche_serviettes_boost
 ```
 
-**Variant 2: boost as a switch.** The integration derives the `boost`
-preset and the `powerful_mode` switch from the same capability (100505), so
-if the device reports it you get both: variants 1 and 2 are a matter of
-taste (a toggle is simpler, the preset keeps the thermostat card in sync). Use
-this one if you prefer the toggle or if the preset is missing. Replace the `horizontal-stack` and the `conditional` with:
-
-```yaml
-      - type: tile
-        entity: switch.seche_serviettes_boost
-        name: Boost
-        icon: mdi:fire
-        tap_action:
-          action: toggle
-          confirmation:
-            text: Basculer le boost du sèche-serviettes ?
-```
-
-**Variant 3: no boost at all, override only** (*dérogation*: hold a
-setpoint for N hours, then return to the program). Use:
-
-```yaml
-      - type: entities
-        title: Dérogation
-        entities:
-          - entity: select.seche_serviettes_derogation_duree
-            name: Durée
-          - entity: switch.seche_serviettes_derogation
-            name: Activer
-          - entity: sensor.seche_serviettes_derogation_restant
-            name: Restant
-```
-
-If both a boost and an override exist, keep variant 1 or 2 **and** add the
-variant 3 card: the app offers both.
+What the device does *not* tell us yet, to measure in phase 3: the boost
+duration and setpoint, and which setpoint the override applies. The boost
+duration entities (`Durée du boost`, `Heure de fin du boost`) are disabled by
+default; enabling them on the device page helps.
 
 ### 4.4 This repo — `roles/home-assistant/defaults/main.yml`
 
