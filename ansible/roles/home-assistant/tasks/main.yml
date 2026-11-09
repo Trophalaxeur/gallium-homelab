@@ -43,6 +43,26 @@
   ansible.builtin.command: mountpoint -q {{ homeassistant_backups_mount }}
   changed_when: false
 
+# Community integrations (Cozytouch, docs/thermor-allure-4-plan.md) are checked
+# out BEFORE the compose file lands and `docker compose up` runs: the bind-mount
+# source must exist, otherwise Docker creates an empty directory and HA logs
+# "Integration cozytouch not found".
+- name: Install git (pinned community integrations)
+  ansible.builtin.apt:
+    name: git
+    state: present
+
+# Checked out at a commit SHA: content-addressed, so what runs is exactly what
+# was reviewed. force: true discards anything edited by hand on the LXC. No
+# `depth`: with a bare SHA as version Ansible ignores it (tested) and clones in full.
+- name: Check out the Cozytouch integration at its pinned commit
+  ansible.builtin.git:
+    repo: "{{ cozytouch_repo }}"
+    dest: "{{ homeassistant_vendor_dir }}/cozytouch"
+    version: "{{ cozytouch_commit }}"
+    force: true
+  notify: Restart home assistant
+
 - name: Deploy Home Assistant docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
