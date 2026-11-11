@@ -29,7 +29,7 @@ none of them needs the Supervisor:
 |---|---|---|
 | Thermor Allure 4 towel rail (`LPOM TD1W`, built-in Wi-Fi) | Community integration [gduteil/cozytouch](https://github.com/gduteil/cozytouch), pinned by Ansible — **cloud only**. Not Overkiz: Wi-Fi-native Cozytouch devices live on Atlantic's Magellan API (`apis.groupe-atlantic.com`), which Overkiz does not cover. Local fallback: a fil-pilote module. See [the plan](thermor-allure-4-plan.md) | no |
 | Shelly plugs and switches | local integration, no cloud account | no |
-| Solar inverter | local API or Modbus TCP over the LAN | no |
+| SolarEdge SE6000H inverter + SE-MTR-3Y meter (Wi-Fi) | Community integration [WillCodeForCats/solaredge-modbus-multi](https://github.com/WillCodeForCats/solaredge-modbus-multi), pinned by Ansible — **local Modbus TCP**, no cloud. See [SolarEdge inverter](#solaredge-inverter) and [the plan](solaredge-integration-plan.md) | no |
 | Wallbox / EV | local API or vendor cloud | no |
 
 The two real costs of Container are priced and accepted:
@@ -128,6 +128,45 @@ include. There is none, so the editor cannot overwrite the repo — and creating
 an automation from the UI fails. That is deliberate. Adding
 `automation ui: !include automations.yaml` restores UI editing; the two keys
 coexist as long as their labels differ.
+
+## SolarEdge inverter
+
+| | |
+|---|---|
+| Inverter | SE6000H-RW000BEN4 (HD-Wave, SetApp, single-phase), firmware 0004.0023.0036 |
+| Meter | SE-MTR-3Y-400V-A (three-phase, Export+Import), on the inverter's RS485 |
+| Optimisers | 16 × S440 — not exposed over Modbus |
+| Address | `solaredge.lan` / `192.168.1.118`, Wi-Fi, MAC `84:D6:C5:41:15:6A` — DHCP-reserve it on the Livebox |
+| Modbus TCP | port 1502, unit id 1, SunSpec base 40000 (inverter, model 101), meter at 40121 (model 203) |
+
+**Modbus TCP was enabled without the installer.** It was off at first: 1502
+refused, 502 timed out. It was turned on in the inverter's local
+commissioning page (switch on **P** for under 5 s → Wi-Fi `SEDG-xxxxxxxx`,
+password on the side label → `http://172.16.0.1` → Site Communication → Modbus
+TCP). Only the Communication menu was touched — never the country/grid code or
+the power limits.
+
+Behaviour to know:
+
+- **One Modbus client at a time.** While HA is connected, any other client
+  (a test script, a second integration) fails or kicks HA off. Stop HA's
+  integration before debugging by hand.
+- **A firmware update can switch Modbus TCP off again.** If every SolarEdge
+  entity goes unavailable after an update, re-check port 1502 first.
+- **Modbus over Wi-Fi is not officially supported** by SolarEdge. It works
+  here; if it drops regularly, wire the inverter's RJ45 port.
+- **Meter sign:** negative power = importing from the grid, positive = exporting.
+- **Power control stays disabled** in the integration options: it writes
+  registers (export limit, curtailment).
+
+Integration setup (UI, stored in `.storage`): *Settings → Devices & services →
+Add → SolarEdge Modbus Multi*, host `solaredge.lan`, port 1502, device id 1,
+one inverter. The meter is detected automatically. Then wire the Energy
+dashboard: solar production = inverter lifetime energy, grid import/export =
+the meter's imported/exported energy.
+
+Panel-level data from the S440 optimisers is only available from the
+SolarEdge cloud portal (unofficial scraping integration), not done here.
 
 ## Networking
 

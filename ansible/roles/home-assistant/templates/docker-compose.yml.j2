@@ -58,6 +58,8 @@ services:
       # read-only: neither HACS nor a hand edit can drift it. Python just skips
       # writing __pycache__ here. Adding the mount recreates the container once.
       - {{ homeassistant_vendor_dir }}/cozytouch/custom_components/cozytouch:/config/custom_components/cozytouch:ro
+      # Same pattern, group_vars: solaredge_modbus_commit.
+      - {{ homeassistant_vendor_dir }}/solaredge-modbus-multi/custom_components/solaredge_modbus_multi:/config/custom_components/solaredge_modbus_multi:ro
 
   # MCP server Claude Code drives HA through (docs/home-assistant.md). Holds an
   # admin token of the dedicated `claude` HA user.
