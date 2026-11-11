@@ -7,6 +7,7 @@ neon_ip: "192.168.1.60"
 pbs_ip: "192.168.1.62"
 immich_ip: "192.168.1.63"
 printer_ip: "192.168.1.29"       # Brother printer, DHCP-reserved on Livebox (MAC 48:45:E6:53:DE:D9)
+solaredge_ip: "192.168.1.118"    # SolarEdge SE6000H inverter (Wi-Fi), to DHCP-reserve on Livebox (MAC 84:D6:C5:41:15:6A)
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
@@ -165,6 +166,14 @@ ha_mcp_image_digest: "sha256:381b1e01635d3c51f35a01882863610bc0b76a22bae93835a6a
 cozytouch_repo: "https://github.com/gduteil/cozytouch.git"
 cozytouch_version: "main@63db34b"   # for humans only (tag once a stable one exists)
 cozytouch_commit: "63db34bd4cbb86c79a45c7078d3e3fa309a62825"
+# Community SolarEdge Modbus integration — SE6000H inverter + SE-MTR-3Y meter,
+# read locally over Modbus TCP (solaredge_ip:1502). Pinned by full commit SHA,
+# same reasoning as Cozytouch. The tag is lightweight: its SHA is the commit.
+# Bump = new SHA + redeploy; read the release notes first. See
+# docs/home-assistant.md, "SolarEdge inverter".
+solaredge_modbus_repo: "https://github.com/WillCodeForCats/solaredge-modbus-multi.git"
+solaredge_modbus_version: "v4.0.13"   # for humans only
+solaredge_modbus_commit: "54a0c53038f83681f4a951ee1d9e5b9582d10ddf"
 
 # --- palladium (internet-facing gateway) ---
 # LXC 108, the ONLY host the Livebox forwards to (443). Caddy requires a client

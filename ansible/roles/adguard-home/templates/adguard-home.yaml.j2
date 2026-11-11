@@ -144,6 +144,12 @@ filtering:
     - domain: printer.flefevre.fr
       answer: "{{ printer_ip }}"
       enabled: true
+    - domain: solaredge.lan
+      answer: "{{ solaredge_ip }}"
+      enabled: true
+    - domain: solaredge.flefevre.fr
+      answer: "{{ solaredge_ip }}"
+      enabled: true
   blocked_services:
     schedule:
       time_zone: Europe/Paris

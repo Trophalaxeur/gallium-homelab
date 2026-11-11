@@ -43,7 +43,8 @@
   ansible.builtin.command: mountpoint -q {{ homeassistant_backups_mount }}
   changed_when: false
 
-# Community integrations (Cozytouch, docs/thermor-allure-4-plan.md) are checked
+# Community integrations (Cozytouch, docs/thermor-allure-4-plan.md; SolarEdge
+# Modbus, docs/home-assistant.md) are checked
 # out BEFORE the compose file lands and `docker compose up` runs: the bind-mount
 # source must exist, otherwise Docker creates an empty directory and HA logs
 # "Integration cozytouch not found".
@@ -60,6 +61,15 @@
     repo: "{{ cozytouch_repo }}"
     dest: "{{ homeassistant_vendor_dir }}/cozytouch"
     version: "{{ cozytouch_commit }}"
+    force: true
+  notify: Restart home assistant
+
+# SolarEdge inverter over local Modbus TCP — docs/home-assistant.md.
+- name: Check out the SolarEdge Modbus integration at its pinned commit
+  ansible.builtin.git:
+    repo: "{{ solaredge_modbus_repo }}"
+    dest: "{{ homeassistant_vendor_dir }}/solaredge-modbus-multi"
+    version: "{{ solaredge_modbus_commit }}"
     force: true
   notify: Restart home assistant
 
