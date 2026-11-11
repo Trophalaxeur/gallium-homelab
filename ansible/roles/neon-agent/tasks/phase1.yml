@@ -23,12 +23,22 @@
     mode: "0644"
     force: false
 
-- name: Add NodeSource APT repo (Node 20 LTS)
+- name: Add NodeSource APT repo (Node {{ nodejs_major }} LTS)
   copy:
     dest: /etc/apt/sources.list.d/nodesource.list
     content: |
-      deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_20.x nodistro main
+      deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ nodejs_major }}.x nodistro main
     mode: "0644"
+  register: nodesource_repo
+
+# `state: present` below never upgrades an installed nodejs: on a major switch
+# (repo line changed) pull the new major explicitly.
+- name: Upgrade nodejs to the new major
+  apt:
+    name: nodejs
+    state: latest
+    update_cache: true
+  when: nodesource_repo.changed
 
 - name: Add GitHub CLI signing key
   get_url:
@@ -65,6 +75,7 @@
 - name: Install Claude Code
   npm:
     name: "@anthropic-ai/claude-code"
+    version: "{{ claude_code_version }}"
     global: true
     state: present
 
@@ -102,18 +113,38 @@
     state: link
     force: true
 
-# Step 7 — multica CLI (pinned tag + sha256 checksum)
-- name: Download multica CLI install script (verified)
-  get_url:
-    url: https://raw.githubusercontent.com/multica-ai/multica/refs/tags/v0.3.2/scripts/install.sh
-    dest: /tmp/multica-install.sh
-    mode: "0755"
-    checksum: "sha256:9e82feee4e3e9a2a63f99d1e674fa9b6b2ef4d8001572a14125d325fc16bf055"
+# Step 7 — multica CLI: release tarball pinned by version + sha256. Same pattern
+# as the AdGuard binary: read-only version probe (also runs under --check), then
+# install only on mismatch. Output looks like "multica 0.8.2 (commit: ...)".
+- name: Read the installed multica CLI version
+  command: /usr/local/bin/multica version
+  register: multica_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
-- name: Install multica CLI
-  command: /tmp/multica-install.sh
-  args:
-    creates: /usr/local/bin/multica
+# No restart handler: on a fresh host the multica-daemon unit only exists after
+# phase2. After a bump on a running host: systemctl restart multica-daemon.
+- name: Install the pinned multica CLI
+  when: ((multica_installed.stdout | default('')).split(' ') + ['', ''])[1] != multica_version
+  block:
+    - name: Download multica CLI {{ multica_version }}
+      get_url:
+        url: "https://github.com/multica-ai/multica/releases/download/v{{ multica_version }}/multica-cli-{{ multica_version }}-linux-amd64.tar.gz"
+        dest: "/tmp/multica-cli-{{ multica_version }}.tar.gz"
+        checksum: "sha256:{{ multica_sha256 }}"
+        mode: "0644"
+
+    - name: Install multica binary
+      unarchive:
+        src: "/tmp/multica-cli-{{ multica_version }}.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        include: [multica]
+        owner: root
+        group: root
+        mode: "0755"
+      when: not ansible_check_mode
 
 # Step 8 — RTK (pinned tag + sha256 checksum)
 - name: Download RTK install script (verified)
@@ -220,23 +251,24 @@
   register: deploy_pubkeys
   loop: "{{ deploy_key_repos }}"
 
-# GET-then-POST: list existing keys on each repo, only POST if our pubkey is
-# missing. Avoids the 422 ambiguity — GitHub's "key is already in use" can
-# mean the key exists ANYWHERE (other repo / other user), not necessarily here.
-- name: List existing deploy keys per repository
-  uri:
-    url: "https://api.github.com/repos/Trophalaxeur/{{ item.item }}/keys"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ vault_gh_admin_token }}"
-      Accept: application/vnd.github+json
-    status_code: 200
-  loop: "{{ deploy_pubkeys.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  register: existing_repo_keys
-  no_log: true
+# Probe each deploy key with the key itself, through its per-repo SSH alias.
+# GitHub names the repo a deploy key belongs to: "Hi Trophalaxeur/<repo>!
+# You've successfully authenticated…" (rc=1, no shell) when registered there,
+# "Permission denied (publickey)" (rc=255) when unknown. No token involved:
+# vault_gh_admin_token is single-use (docs/recovery.md), so a steady-state run
+# must not depend on it — only the POST below needs it, for a missing key.
+# Read-only, so it also runs under --check.
+- name: Check which deploy keys GitHub already accepts
+  become_user: neonuser
+  command: ssh -T -o BatchMode=yes -o ConnectTimeout=10 git@{{ item }}.github.com
+  loop: "{{ deploy_key_repos }}"
+  register: deploy_key_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
 
+# A key attached to ANOTHER repo greets with that repo's name, so it lands here
+# too and the POST fails loudly with 422 "key is already in use" — on purpose.
 - name: Register deploy key on repos where it's missing
   uri:
     url: "https://api.github.com/repos/Trophalaxeur/{{ item.0.item }}/keys"
@@ -250,16 +282,10 @@
       key: "{{ item.0.content | b64decode | trim }}"
       read_only: true
     status_code: 201
-  loop: "{{ deploy_pubkeys.results | zip(existing_repo_keys.results) | list }}"
+  loop: "{{ deploy_pubkeys.results | zip(deploy_key_probe.results) | list }}"
   loop_control:
     label: "{{ item.0.item }}"
-  # Compare normalized keys: GitHub strips the trailing comment, so we strip
-  # ours too (keep only "algo base64", drop the "neon-deploy-..." suffix).
-  vars:
-    local_key_norm: "{{ item.0.content | b64decode | trim | regex_replace('^(\\S+\\s+\\S+).*', '\\1') }}"
-    remote_keys_norm: "{{ item.1.json | map(attribute='key') | map('regex_replace', '^(\\S+\\s+\\S+).*', '\\1') | list }}"
-  when:
-    - local_key_norm not in remote_keys_norm
+  when: ("Hi Trophalaxeur/" ~ item.0.item ~ "!") not in item.1.stderr
   no_log: true
 
 # Step 10 — Runtime directories

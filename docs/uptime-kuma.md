@@ -34,7 +34,7 @@ host — CLAUDE.md rule).
 | Disk | 8 GB (rootfs + Docker image + Kuma's SQLite data) |
 | vCPU | 1 |
 | OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
-| Version | `louislam/uptime-kuma:1.23.16` (pinned) |
+| Version | `louislam/uptime-kuma:2.5.9` (pinned; v1 → v2 migrated 2026-11-11) |
 
 Light footprint (Node + SQLite) — same class as adguard. Config + history live in
 `/opt/uptime-kuma/data` on the rootfs → covered by PBS with the container. No

@@ -3,8 +3,9 @@ terraform {
 
   required_providers {
     proxmox = {
-      source  = "bpg/proxmox"
-      version = "~> 0.73"
+      source = "bpg/proxmox"
+      # >= 0.121: reads LXC `features.keyctl` correctly (see immich.tf).
+      version = "~> 0.121"
     }
   }
 }

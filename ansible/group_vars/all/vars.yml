@@ -16,8 +16,8 @@ acme_email: "admin@flefevre.fr"
 # that release's checksums.txt (or `sha256sum` the downloaded tarball).
 # The play installs it only when the installed version differs, so a UI
 # self-update is reverted on the next run: bump here instead.
-adguard_home_version: "v0.107.79"
-adguard_home_sha256: "c48f4a43000665484c5ec28177de11a004759b620dae8f77b2aabefc9ef3687f"
+adguard_home_version: "v0.107.80"
+adguard_home_sha256: "28593bc761d71469abdbc6f39ca42cbed763ec92b63082c729177b037ed51d18"
 
 # --- neon ---
 smtp_host: "smtp.gmail.com"
@@ -27,6 +27,18 @@ smtp_from: "neon@flefevre.fr"
 neon_admin_email: "admin@flefevre.fr"
 # Admin SSH public key — used by Ansible to authorize neonuser (Terraform handles root)
 ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGpw+OdkwiB/HsgN7V3Vj/FNQI+tX7HsjNAPltIWdXTp flefevre@thallium"
+# Node.js major served by the NodeSource repo. Changing it upgrades nodejs on
+# the next phase1 run. Pick an LTS line (https://nodejs.org/en/about/previous-releases).
+nodejs_major: 26
+# Claude Code npm package, pinned on the `stable` dist-tag of
+# https://www.npmjs.com/package/@anthropic-ai/claude-code?activeTab=versions
+# (installed as root, so it cannot self-update: bump here).
+claude_code_version: "2.1.311"
+# multica CLI release binary (not the upstream install.sh, which always fetches
+# the latest release whatever its own tag). sha256 of
+# multica-cli-<ver>-linux-amd64.tar.gz, from the release's checksums.txt.
+multica_version: "0.8.2"
+multica_sha256: "f8331d66cb4b118550f8a88385bd0a7a504e8407a8a3bc357dccdb41fc226bc6"
 
 # --- immich ---
 # ZFS dataset for photos + Immich's own DB dumps (backup=no equivalent — not a
@@ -40,7 +52,7 @@ immich_admin_email: "admin@flefevre.fr"
 # (matches the LXC hostname, like adguard.lan/neon.lan/pbs.lan) — only the
 # public domain changed, decision 2026-07-07.
 immich_domain: "photos.flefevre.fr"
-immich_version: "v3.3.5"
+immich_version: "v3.4.0"
 smtp_from_immich: "immich@flefevre.fr"
 
 # --- backup ---
@@ -92,9 +104,11 @@ uptime_ip: "192.168.1.65"
 # port-forwarded — HTTPS is for the human dashboard only; the backup jobs still
 # push over http://uptime.lan:3001 (unchanged).
 uptime_domain: "uptime.flefevre.fr"
-# Pinned (never :latest). Stable v1 line — verify the latest patch tag on
-# https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping.
-uptime_kuma_version: "1.23.16"
+# Pinned (never :latest). v2 line since 2026-11-11 — the v1 → v2 jump ran a
+# one-way DB migration (heartbeat aggregation). Verify the latest patch tag on
+# https://hub.docker.com/r/louislam/uptime-kuma/tags before bumping; never use
+# the *-rootless tags (they break on a migrated data dir).
+uptime_kuma_version: "2.5.9"
 
 # --- home assistant (domotique) ---
 # LXC 107. HA Container (no Supervisor) + Caddy, Docker Compose — why
@@ -128,7 +142,7 @@ homeassistant_config_repo_dir: "{{ playbook_dir }}/../../hassium-automation"
 # check https://github.com/home-assistant/core/releases before bumping.
 # ⚠️ Recorder schema migrations are one-way — there is no downgrade once HA has
 # started on a newer version. Take a PBS snapshot before a major bump.
-homeassistant_version: "2026.10.2"
+homeassistant_version: "2026.11.1"
 # Digest of the multi-arch INDEX for that tag (content-type
 # application/vnd.oci.image.index.v1+json — not a per-platform manifest, so the
 # same value works on any architecture). Bump it together with the version:
@@ -136,21 +150,21 @@ homeassistant_version: "2026.10.2"
 #   docker inspect --format '{{index .RepoDigests 0}}' \
 #     ghcr.io/home-assistant/home-assistant:<ver>
 # and copy the sha256:... part. A tag can be re-pushed; a digest cannot.
-homeassistant_image_digest: "sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba6a3a546eb05fc71e89f4"
+homeassistant_image_digest: "sha256:6785d1eca68747a524c156faae1b139ed415c07357386ae6fe17291986e59e82"
 # ha-mcp (homeassistant-ai/ha-mcp), the MCP server sidecar Claude Code drives
 # Home Assistant through. Pinned the same way as HA: version AND multi-arch index
 # digest. Check https://github.com/homeassistant-ai/ha-mcp/releases before
 # bumping, then refresh the digest with the same docker pull/inspect recipe
 # against ghcr.io/homeassistant-ai/ha-mcp:<ver>.
-ha_mcp_version: "8.7.0"
-ha_mcp_image_digest: "sha256:600677bbd7574dfb59682e40d6945f73fcc8852d3684b3671506602473942448"
+ha_mcp_version: "9.1.2"
+ha_mcp_image_digest: "sha256:381b1e01635d3c51f35a01882863610bc0b76a22bae93835a6a5a5c926d9ecb4"
 # Community Cozytouch integration (Atlantic Magellan API) — Thermor Allure 4
 # towel rail. Pinned by full commit SHA: content-addressed, unlike a tag or a
 # GitHub tarball. Bump = new SHA + redeploy; read release_notes/ in the repo
 # first (entity renames break dashboards silently). See docs/thermor-allure-4-plan.md.
 cozytouch_repo: "https://github.com/gduteil/cozytouch.git"
-cozytouch_version: "main@1cdec93"   # for humans only (tag once a stable one exists)
-cozytouch_commit: "1cdec93f858d8b206a48c5c25d342f36340f6649"
+cozytouch_version: "main@63db34b"   # for humans only (tag once a stable one exists)
+cozytouch_commit: "63db34bd4cbb86c79a45c7078d3e3fa309a62825"
 
 # --- palladium (internet-facing gateway) ---
 # LXC 108, the ONLY host the Livebox forwards to (443). Caddy requires a client

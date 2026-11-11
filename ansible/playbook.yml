@@ -116,7 +116,8 @@
   #
   # Vault vars required — add via `ansible-vault edit group_vars/all/vault.yml`:
   #   vault_smtp_password, vault_claude_oauth_token
-  #   vault_gh_admin_token   (Phase 1)
+  #   vault_gh_admin_token   (Phase 1, only while a deploy key is missing on GitHub;
+  #                           expired or absent is fine on a steady-state run)
   #   vault_multica_pat      (Phase 2 — Multica cloud API token)
 
   pre_tasks:
