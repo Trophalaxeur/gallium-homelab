@@ -13,6 +13,7 @@
   register: multica_not_authed
   failed_when: false
   changed_when: false
+  check_mode: false   # read-only probe: its rc gates the login below
 
 - name: Log in multica CLI with PAT
   become_user: neonuser

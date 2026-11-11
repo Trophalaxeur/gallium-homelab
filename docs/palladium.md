@@ -92,7 +92,7 @@ An excluded app on mobile data uses the operator's DNS, so it is the fourth row.
 | RAM / disk / vCPU | 1 GB / 8 GB / 1 |
 | OS | Debian 13, unprivileged LXC, `nesting=1` (Docker) |
 | Backup | none — stateless, rebuilt by `terraform apply` + `--limit adguard,palladium` (adguard pushes the certificate) |
-| Updates | `unattended-upgrades`, daily: Debian security + the Caddy repo. immich-public-proxy is a pinned image — watch its [releases](https://github.com/alangrainger/immich-public-proxy/releases) (GitHub → Watch → Custom → Releases) and bump `vars.yml` |
+| Updates | `unattended-upgrades`, daily: Debian security (shared `unattended-upgrades` role, every LXC) + the Caddy repo (palladium only). immich-public-proxy is a pinned image — watch its [releases](https://github.com/alangrainger/immich-public-proxy/releases) (GitHub → Watch → Custom → Releases) and bump `vars.yml` |
 
 ## How it is wired
 

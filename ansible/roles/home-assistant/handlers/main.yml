@@ -9,6 +9,14 @@
   # "changed" every time it runs. Stating it explicitly is also what satisfies
   # ansible-lint's no-changed-when on a command task.
   changed_when: true
+  # Skipped when `docker compose up -d` (Start Home Assistant) just created or
+  # recreated the homeassistant container in this run (image bump): it already
+  # booted on the new config and integrations, a restart would only boot it a
+  # second time a few seconds later (seen 2026-11-11: unfinished recorder
+  # session). A change WITHOUT a recreate still restarts it.
+  when: >-
+    not ((ha_compose_up.stderr | default('')) ~ (ha_compose_up.stdout | default('')))
+    is search('Container homeassistant\s+(Creat|Recreat|Start)')
 
 # reload (not restart): picks up Caddyfile changes without dropping the
 # listener. Caddy validates on reload and keeps the old config on failure, so a

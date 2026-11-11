@@ -170,11 +170,14 @@ temporarily disable a cron) and confirm the alert actually arrives.
 
 ## Update / maintenance
 
-- **Upgrade Kuma:** bump `uptime_kuma_version` in group_vars (check the latest
-  `1.x` patch tag on [Docker Hub](https://hub.docker.com/r/louislam/uptime-kuma/tags)
-  first — pinned, never `:latest`), then `ansible-playbook playbook.yml --limit
-  uptime` (pulls + `docker compose up -d`). History/config persist in
-  `/opt/uptime-kuma/data`.
+- **Upgrade Kuma:** bump `uptime_kuma_version` **and** `uptime_kuma_image_digest`
+  in group_vars together (latest `2.x` tag on
+  [Docker Hub](https://hub.docker.com/r/louislam/uptime-kuma/tags) — pinned,
+  never `:latest`, never `*-rootless`), then `ansible-playbook playbook.yml
+  --ask-vault-pass --limit uptime` (pulls + `docker compose up -d`).
+  History/config persist in `/opt/uptime-kuma/data`. For a **major** bump, stop
+  the container and copy `data/` first: v1 → v2 (2026-11-11) ran a one-way DB
+  migration. Overall order of operations: [updates.md](updates.md).
 - **TLS renewal:** automatic (adguard's daily cron); same as
   [immich](immich.md#tls-certificate-renewal).
 - **Backup:** the SQLite data is on the rootfs → captured by the daily PBS job.

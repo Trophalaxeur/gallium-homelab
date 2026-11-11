@@ -3,6 +3,8 @@
 #   vault_smtp_password        — SMTP App Password (Gmail — me@flefevre.fr)
 #   vault_claude_oauth_token   — generated with `claude setup-token` on local machine
 #   vault_multica_pat          — Multica cloud API token (Phase 2 only)
-#   vault_gh_admin_token       — GitHub classic PAT with `repo` scope (covers deploy
-#                                key registration); or fine-grained PAT with
-#                                Administration: read+write on the 3 target repos
+#   vault_gh_admin_token       — only while a deploy key is missing on GitHub (fresh
+#                                neon, new repo): GitHub classic PAT with `repo`
+#                                scope, or fine-grained PAT with Administration:
+#                                read+write on the target repos. May be absent
+#                                otherwise (keys are probed over SSH)

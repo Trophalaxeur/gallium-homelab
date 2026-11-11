@@ -53,7 +53,9 @@ rc_ha=$?
 # and a Home Assistant backup landed in the last 25h (a stale one means
 # Immich's Database Backup or HA's scheduled backup silently stopped — a copy
 # of stale files is not a restorable backup, cf. limitation #8).
-fresh_dump=$(find "${SRC}/backups" -type f -mmin -1500 2>/dev/null | head -1)
+# Match the dump's own name: Immich rewrites a `.immich` marker in every folder
+# at each start, which a bare `-type f` took for a fresh dump (2026-11-11).
+fresh_dump=$(find "${SRC}/backups" -type f -name 'immich-db-backup-*.sql.gz' -mmin -1500 2>/dev/null | head -1)
 fresh_ha=$(find "$HASSIUM_SRC" -type f -name '*.tar' -mmin -1500 2>/dev/null | head -1)
 
 if [[ $rc_lib -eq 0 && $rc_db -eq 0 && $rc_ha -eq 0 && -n "$fresh_dump" && -n "$fresh_ha" ]]; then

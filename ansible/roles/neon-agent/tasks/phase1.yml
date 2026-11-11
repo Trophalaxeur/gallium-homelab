@@ -76,6 +76,7 @@
 - name: Install repomix
   npm:
     name: repomix
+    version: "{{ repomix_version }}"
     global: true
     state: present
 

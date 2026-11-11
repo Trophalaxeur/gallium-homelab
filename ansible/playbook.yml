@@ -258,6 +258,7 @@
       register: pbs_storage_check
       failed_when: false
       changed_when: false
+      check_mode: false   # read-only probe: its rc gates the write below
 
     - name: Register PBS storage
       ansible.builtin.command: >
@@ -277,6 +278,7 @@
       ansible.builtin.command: pvesh get /cluster/backup --output-format json
       register: pbs_backup_jobs
       changed_when: false
+      check_mode: false   # read-only probe: its output is parsed below
 
     - name: Create daily PBS backup job (adguard/neon/immich, 30d retention)
       ansible.builtin.command: >
@@ -629,3 +631,25 @@
 
   roles:
     - palladium-cert
+
+# Daily unattended Debian-Security updates on every LXC (not the Proxmox host:
+# hypervisor upgrades — kernel, pve-* — stay a deliberate, rebooted operation).
+# Before 2026-11-11 only palladium had it, and the other LXCs had piled up
+# ~40–50 pending security patches each.
+- name: Unattended security updates on every LXC
+  hosts: homelab:!proxmox
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Accept host key
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -q -T 5 -t ed25519 ' + ansible_host) }}"
+        state: present
+      delegate_to: localhost
+      become: false
+      tags: always
+
+  roles:
+    - unattended-upgrades

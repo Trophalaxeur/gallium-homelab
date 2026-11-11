@@ -1,0 +1,36 @@
+---
+# Daily unattended SECURITY updates only. Third-party repos (Proxmox,
+# NodeSource, Docker CE, Caddy…) stay manual — a host that wants one adds its
+# own 52unattended-upgrades-* origin file (palladium does, for Caddy).
+# No automatic reboot: LXCs share the host kernel, a package upgrade restarts
+# its own services. Docker from Debian (docker.io) is a security origin, so its
+# daemon restart briefly cycles the containers (restart: unless-stopped).
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+    update_cache: true
+
+# Debian's stock 50unattended-upgrades ALSO allows the plain stable suite
+# (origin=Debian,label=Debian: point releases), not just Debian-Security.
+# `#clear` drops that list, then only the security origins are re-added. Files
+# load in lexical order: 50 (stock) → 51 (this) → 52-* (per-host extras append).
+- name: Restrict unattended upgrades to the Debian-Security origins
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/51unattended-upgrades-security-only
+    content: |
+      // Managed by Ansible (unattended-upgrades role).
+      #clear Unattended-Upgrade::Origins-Pattern;
+      Unattended-Upgrade::Origins-Pattern {
+          "origin=Debian,codename=${distro_codename},label=Debian-Security";
+          "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+      };
+    mode: "0644"
+
+- name: Enable the daily unattended upgrade run
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"

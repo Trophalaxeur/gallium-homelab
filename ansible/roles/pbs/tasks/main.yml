@@ -19,6 +19,18 @@
     state: present
     update_cache: true
 
+# proxmox-backup-server depends on zfsutils-linux, whose units need /dev/zfs:
+# absent in an unprivileged LXC (ZFS belongs to the host), so they fail at every
+# boot and keep the container "degraded". The datastore is a plain directory.
+- name: Mask the ZFS units an unprivileged LXC cannot run
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - zfs-mount.service
+    - zfs-share.service
+    - zfs-zed.service
+
 - name: Create datastore directory
   ansible.builtin.file:
     path: "{{ pbs_datastore_path }}"
@@ -29,6 +41,7 @@
   ansible.builtin.command: proxmox-backup-manager datastore list --output-format json
   register: pbs_datastore_list
   changed_when: false
+  check_mode: false   # read-only probe: its output is parsed below
 
 - name: Create PBS datastore
   ansible.builtin.command: >
@@ -39,6 +52,7 @@
   ansible.builtin.command: proxmox-backup-manager user list --output-format json
   register: pbs_user_list
   changed_when: false
+  check_mode: false   # read-only probe: its output is parsed below
 
 - name: Create PBS sync user
   ansible.builtin.command: >
@@ -86,6 +100,7 @@
   ansible.builtin.command: proxmox-backup-manager cert info
   register: pbs_cert_info
   changed_when: false
+  check_mode: false   # read-only probe: its output is parsed below
 
 - name: Expose facts for the Proxmox-host play (register PBS storage + backup job)
   ansible.builtin.set_fact:

@@ -1,8 +1,8 @@
 # Managed by Ansible (uptime-kuma role). Self-hosted heartbeat + service
-# monitoring. Version pinned via uptime_kuma_version (group_vars) — never :latest.
+# monitoring. Pinned by version AND digest (group_vars) — never :latest.
 services:
   uptime-kuma:
-    image: louislam/uptime-kuma:{{ uptime_kuma_version }}
+    image: louislam/uptime-kuma:{{ uptime_kuma_version }}@{{ uptime_kuma_image_digest }}
     container_name: uptime-kuma
     restart: unless-stopped
     ports:
