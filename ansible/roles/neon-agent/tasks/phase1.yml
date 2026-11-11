@@ -23,22 +23,12 @@
     mode: "0644"
     force: false
 
-- name: Add NodeSource APT repo (Node {{ nodejs_major }} LTS)
+- name: Add NodeSource APT repo for Node {{ nodejs_major }}
   copy:
     dest: /etc/apt/sources.list.d/nodesource.list
     content: |
       deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ nodejs_major }}.x nodistro main
     mode: "0644"
-  register: nodesource_repo
-
-# `state: present` below never upgrades an installed nodejs: on a major switch
-# (repo line changed) pull the new major explicitly.
-- name: Upgrade nodejs to the new major
-  apt:
-    name: nodejs
-    state: latest
-    update_cache: true
-  when: nodesource_repo.changed
 
 - name: Add GitHub CLI signing key
   get_url:
@@ -55,10 +45,13 @@
     mode: "0644"
 
 # Step 3 — packages
+# The nodejs version wildcard makes a major switch converge: an installed
+# nodejs outside nodejs_major does not match, so apt installs that major
+# (plain `nodejs` + `state: present` would keep the old one forever).
 - name: Install packages
   apt:
     name:
-      - nodejs
+      - "nodejs={{ nodejs_major }}.*"
       - git
       - gh
       - cron
