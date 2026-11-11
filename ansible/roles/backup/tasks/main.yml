@@ -7,12 +7,13 @@
 
 # Step 1 — packages
 # python3-boto3: drives the weekly Object Lock renewal (put-object-retention) —
-# rclone cannot extend retention on existing objects. rclone: the copy engine.
+# rclone cannot extend retention on existing objects. unzip: rclone's release
+# archive (rclone itself is the pinned upstream binary below, not Debian's).
 # msmtp/mailutils: abort/alert mail, same pattern as neon.
 - name: Install packages
   ansible.builtin.apt:
     name:
-      - rclone
+      - unzip
       - python3-boto3
       - cron
       - curl
@@ -21,6 +22,53 @@
       - mailutils
     state: present
     update_cache: true
+
+# Step 1b — rclone, upstream binary pinned by version + sha256 (same pattern as
+# the AdGuard binary). Debian's package is removed so there is exactly one
+# rclone; the cron PATH (cron-backup.j2) starts with /usr/local/bin anyway.
+- name: Remove the Debian rclone package
+  ansible.builtin.apt:
+    name: rclone
+    state: absent
+
+# Read-only, so it also runs under --check. A missing binary reads as empty.
+# Output's first line looks like "rclone v1.76.0".
+- name: Read the installed rclone version
+  ansible.builtin.command: /usr/local/bin/rclone version
+  register: backup_rclone_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the pinned rclone binary
+  when: >-
+    ((backup_rclone_installed.stdout | default('')).split('\n') | first).split(' ') | last
+    != rclone_version
+  block:
+    - name: Download rclone {{ rclone_version }}
+      ansible.builtin.get_url:
+        url: "https://downloads.rclone.org/{{ rclone_version }}/rclone-{{ rclone_version }}-linux-amd64.zip"
+        dest: "/tmp/rclone-{{ rclone_version }}.zip"
+        checksum: "sha256:{{ rclone_sha256 }}"
+        mode: "0644"
+
+    - name: Extract rclone
+      ansible.builtin.unarchive:
+        src: "/tmp/rclone-{{ rclone_version }}.zip"
+        dest: /tmp
+        remote_src: true
+      when: not ansible_check_mode
+
+    # copy writes a temp file then renames: safe even mid-job.
+    - name: Install binary
+      ansible.builtin.copy:
+        src: "/tmp/rclone-{{ rclone_version }}-linux-amd64/rclone"
+        dest: /usr/local/bin/rclone
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      when: not ansible_check_mode
 
 # Step 2 — msmtp (mail on abort; shared vault_smtp_password like neon)
 - name: Deploy msmtp config
@@ -62,6 +110,7 @@
   ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_photos_src }}
   register: backup_photos_mnt
   changed_when: false
+  check_mode: false   # read-only assert: must also hold under --check
   failed_when: backup_photos_mnt.rc != 0 or 'ro' not in backup_photos_mnt.stdout.split(',')
   # rc != 0 → not mounted (missing bind-mount); 'ro' absent → not read-only.
 
@@ -70,11 +119,13 @@
   ansible.builtin.command: findmnt --noheadings --output OPTIONS {{ backup_hassium_src }}
   register: backup_hassium_mnt
   changed_when: false
+  check_mode: false
   failed_when: backup_hassium_mnt.rc != 0 or 'ro' not in backup_hassium_mnt.stdout.split(',')
 
 - name: Assert the HDD bind-mount is actually mounted (not an empty dir)
   ansible.builtin.command: mountpoint -q {{ backup_hdd_mount }}
   changed_when: false
+  check_mode: false
   # Fails if /mnt/hdd is a plain directory → the HDD passthrough is missing.
   # Same failure the runtime job guards against (Scénario 8), checked early.
 

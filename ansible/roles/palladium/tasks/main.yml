@@ -97,23 +97,11 @@
     state: present
     update_cache: true
 
-# --- Security updates — the only internet-facing host must patch itself ---
-# Debian's stock 50unattended-upgrades already allows the Debian-Security
-# origins; the extra file adds the Caddy repo (origin taken from its Release
-# file). immich-public-proxy is a pinned image: bumped by hand (vars.yml).
-- name: Install unattended-upgrades
-  ansible.builtin.apt:
-    name: unattended-upgrades
-    state: present
-
-- name: Enable the daily unattended upgrade run
-  ansible.builtin.copy:
-    dest: /etc/apt/apt.conf.d/20auto-upgrades
-    content: |
-      APT::Periodic::Update-Package-Lists "1";
-      APT::Periodic::Unattended-Upgrade "1";
-    mode: "0644"
-
+# --- Security updates — the only internet-facing host also auto-patches Caddy ---
+# unattended-upgrades itself (Debian-Security, every LXC) comes from the
+# unattended-upgrades role, playbook's last play. This file adds the Caddy repo
+# here only (origin taken from its Release file). immich-public-proxy is a
+# pinned image: bumped by hand (vars.yml).
 - name: Allow unattended upgrades from the Caddy repo
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/52unattended-upgrades-caddy
