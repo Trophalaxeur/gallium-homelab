@@ -337,6 +337,18 @@ hook restarts it right after landing the certificate.
 The deploy is not finished at this point: the HTTPS URL answers **400** until
 the network settings below exist.
 
+## Upgrading
+
+Bump `homeassistant_version` and `homeassistant_image_digest` together
+(likewise `ha_mcp_*`, `cozytouch_commit`) in `group_vars/all/vars.yml`, then
+deploy `--limit hassium`. Before a bump: read the release's
+*backward-incompatible changes*, and check that the PBS backup of LXC 107 is
+fresh — recorder schema migrations are one-way. The role validates the config
+with `check_config` **inside the new image** before restarting. After: look for
+new deprecation `WARNING`s from custom integrations in the log (they name the
+HA version that will break them). Order of operations and the other pinned
+apps: [updates.md](updates.md).
+
 ## Network settings — one-time, after the first deploy
 
 Home Assistant 2026.8 moved the HTTP server settings from `configuration.yaml`
