@@ -78,19 +78,13 @@ resource "proxmox_virtual_environment_container" "immich" {
 
   features {
     nesting = true
-    # keyctl=1 est bien posé côté Proxmox (`pct config 104` et l'API REST le
-    # confirment tous les deux), mais la version du provider bpg/proxmox
-    # réellement verrouillée (cf. `.terraform.lock.hcl` — ne pas figer un
-    # numéro ici, ça dérive) ne le parse pas correctement en lecture
-    # (state refresh-only renvoie keyctl=false quel que soit l'état réel —
-    # bug de parsing du champ `features`, pas une histoire de permissions
-    # cette fois). Déclarer
-    # `keyctl = true` ici ferait donc croire à un drift permanent et Terraform
-    # retenterait un PUT à chaque apply → 403 root@pam (même restriction que
-    # le mount_point). Laissé à `false` pour matcher ce que le provider peut
-    # effectivement lire ; la vraie valeur (1) reste posée manuellement hors
-    # Terraform, cf. next-steps.md 2026-07-06.
-    keyctl = false
+    # keyctl=1 is set on Proxmox (`pct config 104`), originally by hand: the API
+    # token cannot change it (403, root@pam only — same restriction as the
+    # mount_point). bpg/proxmox < 0.121 always read it back as false, so this
+    # used to declare false to avoid a phantom drift; >= 0.121 (main.tf
+    # constraint) reads the real value. Must stay true: a plan showing
+    # keyctl true -> false means a wrong provider, never apply it.
+    keyctl = true
   }
 
   startup {

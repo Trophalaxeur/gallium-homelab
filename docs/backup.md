@@ -134,7 +134,8 @@ Keep this table current; bump both rows together, never one alone.
 
 | Immich version | Postgres image (pinned by digest) | Valkey/Redis |
 |---|---|---|
-| `v3.3.5` (current) | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357…40b1c23` | `docker.io/valkey/valkey:9@sha256:c123e37…08e1d` |
+| `v3.4.0` (current) | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357…40b1c23` | `docker.io/valkey/valkey:9@sha256:418652c…11eb9dfd` |
+| `v3.3.5` | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357…40b1c23` | `docker.io/valkey/valkey:9@sha256:c123e37…08e1d` |
 | `v3.0.1` | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357…40b1c23` | `docker.io/valkey/valkey:9@sha256:4963247…966f2d9` |
 
 Source of truth: `ansible/roles/immich/templates/docker-compose.yml.j2` +
