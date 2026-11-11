@@ -54,6 +54,10 @@ services:
       # local backup location writes there unchanged. The backup LXC ships it
       # to Scaleway + HDD.
       - {{ homeassistant_backups_mount }}:/config/backups
+      # Community integration pinned by commit (group_vars: cozytouch_commit),
+      # read-only: neither HACS nor a hand edit can drift it. Python just skips
+      # writing __pycache__ here. Adding the mount recreates the container once.
+      - {{ homeassistant_vendor_dir }}/cozytouch/custom_components/cozytouch:/config/custom_components/cozytouch:ro
 
   # MCP server Claude Code drives HA through (docs/home-assistant.md). Holds an
   # admin token of the dedicated `claude` HA user.

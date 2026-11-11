@@ -30,6 +30,28 @@ the merge sees a difference on every run.
   for the first install. After an AdGuard upgrade that migrates keys, update the template to
   the new layout, or the merge will keep re-adding the old keys.
 
+## How the binary is installed and upgraded
+
+The binary is pinned like the container images: `adguard_home_version` and
+`adguard_home_sha256` (the `linux_amd64` tarball) in `group_vars/all/vars.yml`. The role reads
+`/opt/AdGuardHome/AdGuardHome --version` and downloads, verifies and swaps the binary **only
+when the installed version differs** from the pinned one. A steady-state run neither downloads
+nor restarts anything, and `--check` works (the download is only simulated, extract and
+install are skipped).
+
+**Consequence: an upgrade from the AdGuard web UI is reverted on the next run.** The installed
+version then differs from the pinned one, so the play reinstalls the pinned version and
+restarts AdGuard. Upgrade through Git instead:
+
+1. Pick a release on [github.com/AdguardTeam/AdGuardHome/releases](https://github.com/AdguardTeam/AdGuardHome/releases).
+2. Set `adguard_home_version` (e.g. `v0.107.80`) and `adguard_home_sha256` together. The hash
+   is the `AdGuardHome_linux_amd64.tar.gz` line of that release's `checksums.txt`.
+3. Deploy with `--limit adguard`. The play swaps the binary and restarts AdGuard once (a DNS
+   blip).
+4. If the release migrates `AdGuardHome.yaml`, follow the `schema_version` note above.
+
+Downgrading works the same way (pin the older version).
+
 ## Web Interface
 
 | Parameter | Value | Why |

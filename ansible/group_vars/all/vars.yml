@@ -10,6 +10,14 @@ printer_ip: "192.168.1.29"       # Brother printer, DHCP-reserved on Livebox (MA
 adguard_admin_user: "admin"
 adguard_domain: "adguard.flefevre.fr"
 acme_email: "admin@flefevre.fr"
+# AdGuard Home binary, pinned like the container images: version AND sha256 of
+# the linux_amd64 tarball. Bump both together — check
+# https://github.com/AdguardTeam/AdGuardHome/releases, then take the hash from
+# that release's checksums.txt (or `sha256sum` the downloaded tarball).
+# The play installs it only when the installed version differs, so a UI
+# self-update is reverted on the next run: bump here instead.
+adguard_home_version: "v0.107.79"
+adguard_home_sha256: "c48f4a43000665484c5ec28177de11a004759b620dae8f77b2aabefc9ef3687f"
 
 # --- neon ---
 smtp_host: "smtp.gmail.com"
@@ -136,6 +144,13 @@ homeassistant_image_digest: "sha256:33afb0659d786213264c2211f8d91c5fe87461c56eba
 # against ghcr.io/homeassistant-ai/ha-mcp:<ver>.
 ha_mcp_version: "8.7.0"
 ha_mcp_image_digest: "sha256:600677bbd7574dfb59682e40d6945f73fcc8852d3684b3671506602473942448"
+# Community Cozytouch integration (Atlantic Magellan API) — Thermor Allure 4
+# towel rail. Pinned by full commit SHA: content-addressed, unlike a tag or a
+# GitHub tarball. Bump = new SHA + redeploy; read release_notes/ in the repo
+# first (entity renames break dashboards silently). See docs/thermor-allure-4-plan.md.
+cozytouch_repo: "https://github.com/gduteil/cozytouch.git"
+cozytouch_version: "main@1cdec93"   # for humans only (tag once a stable one exists)
+cozytouch_commit: "1cdec93f858d8b206a48c5c25d342f36340f6649"
 
 # --- palladium (internet-facing gateway) ---
 # LXC 108, the ONLY host the Livebox forwards to (443). Caddy requires a client

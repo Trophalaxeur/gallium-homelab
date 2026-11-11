@@ -18,6 +18,9 @@ homeassistant_staging_dir: "{{ homeassistant_install_dir }}/config-staging"
 homeassistant_config_files:
   - configuration.yaml
   - automations-managed.yaml
+# Pinned community integrations, checked out outside config/ and bind-mounted
+# read-only into /config/custom_components (docker-compose.yml.j2).
+homeassistant_vendor_dir: "{{ homeassistant_install_dir }}/vendor"
 # Full image reference, digest-pinned. Assembled from the two group_vars inputs
 # so the running container and the check_config validation can never use two
 # different images.

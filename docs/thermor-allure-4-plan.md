@@ -1,0 +1,461 @@
+---
+title: "Thermor Allure 4 — integration plan"
+description: "Step-by-step plan to bring the Thermor Allure 4 towel rail (LPOM TD1W) into Home Assistant through the community Cozytouch integration, pinned by Ansible, with a Git-owned dashboard and a boost button."
+---
+
+Plan for the bathroom towel rail. Status: phases 0 and 1 done (2026-11-09),
+phase 2 in progress. Each phase ends
+with an explicit *done when* so it can be ticked off on its own. Automations
+are out of scope here, deliberately.
+
+## The device
+
+| Label field | Value | What it tells |
+|---|---|---|
+| Nom / Code | ALLURE 4 / 483271 | Thermor Allure 4, 750 W, left-hand, carbon finish |
+| Type | `LPOM TD1W` | `TD1` = Atlantic product type for towel dryers (productId 53); `W` = built-in Wi-Fi |
+| N° | 2517 0108 | Built 2025, week 17 |
+
+## Decisions already taken
+
+**Integration: [gduteil/cozytouch](https://github.com/gduteil/cozytouch), not
+Overkiz.** Atlantic runs two clouds behind the Cozytouch brand. The
+Wi-Fi-native devices (no Cozytouch bridge) live on the *Magellan* API
+(`apis.groupe-atlantic.com`), which the core Overkiz integration does not
+cover. The community integration talks to that API and maps `TD1` to a
+towel rack: climate entity, room temperature, presets (`basic`, `prog`, `override` on
+this device; a `boost` preset only on devices that expose one), a boost switch, override (*dérogation*), weekly
+program as a calendar, plus its own schedule card. Cloud only: there is no
+local API (none documented; Home Assistant's Overkiz page lists no Atlantic or
+Thermor gateway among its local-API hubs).
+
+**Installation: pinned by Ansible, not HACS (recommended).** Everything in
+this homelab is pinned by version and digest (`homeassistant_image`,
+`ha_mcp_image`). HACS would be the one component that updates itself from
+the UI, outside Git, and it needs a GitHub device login on top. The
+integration has no Python requirements (`"requirements": []` in its
+manifest), so the simplest pinned install is a `git` checkout at a commit SHA,
+bind-mounted **read-only** into the container.
+
+| | Option A — Ansible + bind-mount (recommended) | Option B — HACS |
+|---|---|---|
+| Pinning | Commit SHA in `group_vars`, reviewed in a PR | Whatever HACS installs; updates from the UI |
+| Rebuild | Reproduced by the play | HACS itself must be reinstalled, then the repo re-added |
+| Updates | Bump the SHA, redeploy | One click, with update notifications |
+| Extra moving parts | `git` on the LXC | HACS + GitHub device auth + its own `.storage` |
+| Fits the "Git owns how HA is installed" rule | yes | no |
+
+Option B is documented in [an appendix](#appendix--option-b-hacs) in case
+other community integrations pile up later and HACS becomes worth it.
+
+## Phase 0 — prerequisites (15 min)
+
+1. **The device works in the official app.** Thermor/Cozytouch app, towel rail
+   paired, reachable from outside the home Wi-Fi (switch the phone to 4G and
+   change the setpoint). The integration uses the **same account**:
+   email + password, no MFA support.
+
+   **Also check there is no Cozytouch bridge in the house** (no "Bridge" or
+   "Pass Cozytouch" box in the app's device list; the rail pairs over Wi-Fi
+   itself). Thermor's pages are ambiguous on whether the Allure 4 is Wi-Fi
+   native or needs a bridge, and nothing online mentions `TD1W`/`LPOM`. If a
+   bridge turns out to be involved, the device may sit on the Overkiz side
+   and this plan's premise must be re-checked before going on.
+2. **Home Assistant is recent enough.** `hacs.json` requires ≥ 2025.12.0;
+   `homeassistant_version` is `2026.10.2`. OK.
+3. **hassium reaches Atlantic's cloud.**
+   ```bash
+   ssh root@hassium.lan 'python3 -c "import urllib.request as u; print(u.urlopen(\"https://apis.groupe-atlantic.com/\", timeout=10).status)"'
+   ```
+   `curl` is not installed on hassium (Debian minimal LXC), hence python3.
+   Any HTTP code is fine; a timeout or DNS error is not. Checked 2026-11-09: `200`.
+4. **Choose the version to pin.** On 2026-11-07 the repository has:
+
+   | Ref | Commit | Notes |
+   |---|---|---|
+   | tag `1.4` | `0a91651` | Last stable. One config entry per device, no calendar or schedule card |
+   | tag `2026.10.1b1` | `617c905` | Beta of the new CalVer line |
+   | `main` | `1cdec93` | `manifest.json` says `2026.10.0`; untagged |
+
+   Recommendation: take the newest **non-beta** CalVer tag if one exists by then;
+   otherwise `main` at `1cdec93`. It is 10 commits ahead of `2026.10.1b1`,
+   including a fix for the warnings recent Home Assistant releases log about
+   the integration (`fc73518`) and one restoring the heating status of
+   heaters (`bdfbd56`). Both refs have the schedule card, the calendar and the
+   single account entry. Avoid `1.4`: its config entry format is migrated by
+   later versions (`migrate_1_4.py`), so starting there means doing a
+   migration for nothing. Pin the **full** 40-character SHA. The beta tag is
+   lightweight, so `git ls-remote <url> refs/tags/<tag>` already prints the
+   commit; only an annotated tag needs the `^{}` form.
+
+*Done when*: app works off-LAN, curl answers, SHA chosen.
+
+## Phase 1 — install the integration (Option A)
+
+All changes are in this public repository.
+
+### 1.1 `group_vars/all/vars.yml`
+
+Next to `homeassistant_version`:
+
+```yaml
+# Community Cozytouch integration (Atlantic Magellan API) — Thermor Allure 4
+# towel rail. Pinned by full commit SHA: content-addressed, unlike a tag or a
+# GitHub tarball. Bump = new SHA + redeploy. See docs/thermor-allure-4-plan.md.
+cozytouch_repo: "https://github.com/gduteil/cozytouch.git"
+cozytouch_version: "main@1cdec93"          # for humans only (tag if a stable one exists)
+cozytouch_commit: "<full 40-char SHA>"
+```
+
+### 1.2 `roles/home-assistant/defaults/main.yml`
+
+```yaml
+# Pinned community integrations, checked out outside config/ and bind-mounted
+# read-only into /config/custom_components (docker-compose.yml.j2).
+homeassistant_vendor_dir: "{{ homeassistant_install_dir }}/vendor"
+```
+
+### 1.3 `roles/home-assistant/tasks/main.yml`
+
+Insert **before** *Deploy Home Assistant docker-compose.yml* (the bind-mount
+source must exist before `docker compose up`, otherwise Docker creates an empty
+directory and HA logs *Integration cozytouch not found*):
+
+```yaml
+- name: Install git (pinned community integrations)
+  ansible.builtin.apt:
+    name: git
+    state: present
+
+# Checked out at a commit SHA: content-addressed, so what runs is exactly what
+# was reviewed. force: true discards anything edited by hand on the LXC.
+- name: Check out the Cozytouch integration at its pinned commit
+  ansible.builtin.git:
+    repo: "{{ cozytouch_repo }}"
+    dest: "{{ homeassistant_vendor_dir }}/cozytouch"
+    version: "{{ cozytouch_commit }}"
+    force: true
+  notify: Restart home assistant
+```
+
+> No `depth`: with a bare SHA as `version`, Ansible ignores it (warning
+> *"Shallow clones are only available for HEAD, branches, tags or in
+> combination with refspec"*) and does a full clone anyway. Tested with
+> ansible-core 2.22: checkout at the SHA works. The repository is small.
+
+### 1.4 `roles/home-assistant/templates/docker-compose.yml.j2`
+
+Under `homeassistant.volumes`:
+
+```yaml
+      # Community integration pinned by commit (group_vars: cozytouch_commit),
+      # read-only: neither HACS nor a hand edit can drift it. Python just skips
+      # writing __pycache__ here. Adding the mount recreates the container once.
+      - {{ homeassistant_vendor_dir }}/cozytouch/custom_components/cozytouch:/config/custom_components/cozytouch:ro
+```
+
+### 1.5 Deploy and check
+
+```bash
+# --ask-vault-pass (or --vault-password-file <path>): group_vars/all loads the vault
+ansible-playbook playbook.yml --limit adguard,hassium --ask-vault-pass --check --diff   # review
+ansible-playbook playbook.yml --limit adguard,hassium --ask-vault-pass
+ssh root@hassium.lan 'docker exec homeassistant ls /config/custom_components/cozytouch/manifest.json'
+ssh root@hassium.lan 'docker logs homeassistant 2>&1 | grep -i "custom integration cozytouch"'
+```
+
+Expected: the *"We found a custom integration cozytouch which has not been
+tested by Home Assistant"* warning, the standard notice for any custom
+component, and nothing else about it.
+
+*Done when*: HA restarted, the warning above is in the logs, no error.
+
+## Phase 2 — configure (UI, ~10 min)
+
+This lives in `.storage` (config entry, entity registry). Git cannot own it.
+
+1. **Settings → Devices & services → Add integration → Atlantic Cozytouch**,
+   log in with the Thermor app account, select the towel rail.
+2. **Configure → poll interval: keep 60 s.** The integration's own README:
+   the device reports to the cloud on its own schedule, so below a minute you
+   buy nothing but load on Atlantic's API, and a reason for them to rate-limit
+   the account the app uses too.
+3. **Device page**: area *Salle de bain*; rename the device *Sèche-serviettes*.
+4. **Stabilize the entity ids** (the dashboard references them). Rename to:
+
+   | Entity (current id, after the Cozytouch add) | Target id |
+   |---|---|
+   | `climate.allure_4_0750w_carbone_chene_chauffage` | `climate.seche_serviettes` |
+   | `calendar.allure_4_0750w_carbone_chene_programme_chauffage` | `calendar.seche_serviettes_chauffage` |
+   | `switch.allure_4_0750w_carbone_chene_mode_boost` | `switch.seche_serviettes_boost` |
+   | `select.allure_4_0750w_carbone_chene_derogation_duree` | `select.seche_serviettes_derogation_duree` |
+   | `sensor.allure_4_0750w_carbone_chene_derogation_en_cours` | `sensor.seche_serviettes_derogation_en_cours` |
+   | `sensor.allure_4_0750w_carbone_chene_derogation_temps_restant` | `sensor.seche_serviettes_derogation_restant` |
+
+   Renaming an entity id does not rename the device (and the reverse), so
+   the two renames are independent.
+
+5. **Inventory what the device actually exposes.** Fill in this table; it
+   decides the dashboard variant in phase 4:
+
+   | Question | How to check | Answer (2026-11-09, via ha-mcp) |
+   |---|---|---|
+   | `boost` in the climate's `preset_modes`? | Developer tools → States | **No.** Boost is the `Mode Boost` switch |
+   | `prog` / `basic` presets? | same | Yes: `preset_modes` = `basic`, `prog`, `override` |
+   | `hvac_modes` | same | `off`, `heat`; `min_temp` 7, `max_temp` 28 |
+   | `current_temperature` populated? | same | Yes (19.1 °C), `hvac_action: idle` |
+   | Override entities present? | device page | Select (1 h to 24 h), `Dérogation en cours` and `temps restant` are **sensors**; no activation switch (use the `override` preset) |
+   | Any *unnamed capability* repair issue? | Settings → Repairs | One warning: 2 unnamed capabilities (`371`, `103117`), so they do not reach HA. Harmless (a mapping gap, not a fault); upstream PR #198 names `103117` (water heaters). Dismiss it, or open an issue with the diagnostics if a missing value matters |
+   | Calendar | device page | Present (`Programme Chauffage`, heating program) |
+   | Consumption | device page | A `Consommation` energy sensor exists |
+
+   ha-mcp can produce the same inventory in one go (*"list every entity of the
+   Cozytouch device and the climate's attributes"*).
+6. **Something missing or wrong?** Device page → ⋮ → *Download diagnostics*,
+   then open an issue on `gduteil/cozytouch` with it. Check the file first: it
+   should be redacted, but look for the account email or serial numbers before
+   attaching it anywhere. **Never commit it**.
+
+*Done when*: the device is in *Salle de bain*, the ids match the table, the
+inventory table is filled in.
+
+## Phase 3 — validate the three must-haves
+
+Run each from HA, read back in the official app (and the reverse). Note the
+delay: cloud polling means up to ~60 s, plus however long the device takes to
+report.
+
+| # | Need | Action in HA | Expected in the app | Observed / delay |
+|---|---|---|---|---|
+| 1 | Status | Read `current_temperature`, `hvac_action` | Same temperature (±0.5 °C) | **OK** 2026-11-09: app 19 °C, HA 19.1 °C, `hvac_action: idle` |
+| 2a | Read the program | Open `calendar.seche_serviettes_chauffage` | Same slots as the app | **OK** 2026-11-09: `cozytouch.get_schedule` = the app's week (weekdays 15.5 / 22 at 05:45 / 15.5 at 08:00 / 19 at 18:00 / 15.5 at 21:00; weekend 22 at 06:15, back to 15.5 at 09:00) |
+| 2b | Change the program | Move a slot with the schedule card (phase 4) or `cozytouch.set_schedule` | Slot moved in the app | |
+| 2c | Program change from the app | Edit a slot in the app | Calendar updated after ≤ 1 poll | |
+| 3a | Boost (start) | Boost tile (phase 4) or `switch.seche_serviettes_boost` | App shows boost running; note setpoint and duration | |
+| 3b | Boost (stop) | Same switch, off | Boost stopped in the app | |
+| 3c | Boost (end on its own) | Let it run out | Switch goes back to `off`, climate to `prog` | |
+| 3d | Override | Pick a 1 h duration, set the climate to the `override` preset | App shows the dérogation; `Dérogation en cours` turns on, `temps restant` counts down | |
+| 4 | Robustness | `docker restart homeassistant` while the program runs | Device keeps its program (it holds it itself) | |
+
+`cozytouch.set_schedule` test call (Developer tools → Actions), **restore the
+original afterwards**: first read it with `cozytouch.get_schedule`.
+
+```yaml
+action: cozytouch.set_schedule
+target:
+  entity_id: climate.seche_serviettes
+data:
+  program: heating
+  days: [saturday]
+  slots:
+    - time: "00:00"
+      temperature: 16
+    - time: "07:00"
+      temperature: 22
+    - time: "09:00"
+      temperature: 16
+```
+
+Rules from the integration: max 10 slots per day, the first at `00:00`,
+whole degrees only.
+
+*Done when*: rows 1 to 3c pass. Rows 3d and 4 are informative.
+
+## Phase 4 — dashboard with a boost button
+
+Git-owned, like the automations: a **YAML-mode dashboard** in the private
+repository `hassium-automation`, deployed by the existing copy → `check_config`
+→ swap pipeline. The UI cannot edit it, which is the point.
+
+### 4.1 One-time UI step: the schedule card resource
+
+The integration serves its card at `/cozytouch/cozytouch-schedule-card.js`,
+but Home Assistant must be told to load it. The *Resources* menu only shows
+with **Advanced mode** on (user profile). Then **Settings → Dashboards → ⋮ →
+Resources → Add**, URL `/cozytouch/cozytouch-schedule-card.js`, type
+*JavaScript module*. Then refresh the browser (Ctrl+F5); the HA companion app
+needs *Settings → Companion app → Debugging → Reset frontend cache*.
+
+That lives in `.storage`. Add it to the *UI-side choices to redo* table in
+`docs/home-assistant.md`. (Declaring resources in YAML needs
+`resource_mode: yaml`, which turns the UI resource manager off; not worth it
+for one card.) After editing the dashboard file later, use the dashboard's
+**⋮ → Refresh**: a browser reload does not always pick the change up.
+
+### 4.2 Private repo — `configuration.yaml`
+
+```yaml
+lovelace:
+  dashboards:
+    # The URL key needs a hyphen (HA rule), kebab-case anyway.
+    salle-de-bain:
+      mode: yaml
+      filename: dashboard-salle-de-bain.yaml
+      title: Salle de bain
+      icon: mdi:shower
+      show_in_sidebar: true
+      require_admin: false
+```
+
+### 4.3 Private repo — `dashboard-salle-de-bain.yaml`
+
+Flat at the root on purpose: the role copies files one by one into a staging
+directory and does not create sub-directories.
+
+**Measured on this device (2026-11-09): only the switch variant applies.** The
+climate exposes the presets `basic`, `prog` and `override`, with **no `boost`
+preset**; boost is the `Mode Boost` switch (`switch.seche_serviettes_boost`).
+The override (*dérogation*) is started through the `override` preset, its
+duration comes from a select, and `Dérogation en cours` is a read-only sensor
+(there is no activation switch). The dashboard below follows that.
+
+```yaml
+title: Salle de bain
+views:
+  - title: Sèche-serviettes
+    path: seche-serviettes
+    icon: mdi:radiator
+    cards:
+      # Status: room temperature, setpoint, mode, and the preset selector
+      # (basic = manual setpoint, prog = weekly program, override = dérogation).
+      - type: thermostat
+        entity: climate.seche_serviettes
+        name: Sèche-serviettes
+        features:
+          - type: climate-hvac-modes
+            hvac_modes: ["off", "heat"]
+          - type: climate-preset-modes
+            style: dropdown
+
+      # Exceptional run. A toggle: tapping it starts or stops the boost, and
+      # both are confirmed: 750 W for a while is not free.
+      - type: tile
+        entity: switch.seche_serviettes_boost
+        name: Boost
+        icon: mdi:fire
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Basculer le boost du sèche-serviettes ?
+
+      # Only shown while the boost runs.
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: switch.seche_serviettes_boost
+            state: "on"
+        card:
+          type: markdown
+          content: >-
+            🔥 **Boost en cours**: consigne
+            {{ state_attr('climate.seche_serviettes', 'temperature') }} °C
+
+      # Override: pick the duration here, start it with the `override` preset
+      # of the thermostat card above.
+      - type: entities
+        title: Dérogation
+        entities:
+          - entity: select.seche_serviettes_derogation_duree
+            name: Durée
+          - entity: sensor.seche_serviettes_derogation_en_cours
+            name: En cours
+          - entity: sensor.seche_serviettes_derogation_restant
+            name: Restant
+
+      # Weekly program, editable (cozytouch.set_schedule under the hood).
+      - type: custom:cozytouch-schedule-card
+        entity: climate.seche_serviettes
+        program: heating
+        title: Programmation
+
+      - type: history-graph
+        title: Dernières 24 h
+        hours_to_show: 24
+        entities:
+          - entity: climate.seche_serviettes
+          - entity: switch.seche_serviettes_boost
+```
+
+Measured: the boost lasts **20 min** (`Durée du boost`, a disabled-by-default
+entity, enabled on the device page). `Heure de fin du boost` holds the end of
+the last boost as an epoch in seconds, shown as a duration: cosmetic, ignore
+it. Still to measure in phase 3: the boost setpoint, and which setpoint the
+override applies.
+
+### 4.4 This repo — `roles/home-assistant/defaults/main.yml`
+
+```yaml
+homeassistant_config_files:
+  - configuration.yaml
+  - automations-managed.yaml
+  - dashboard-salle-de-bain.yaml
+```
+
+### 4.5 Order of operations
+
+1. Private repo first: commit `configuration.yaml` + `dashboard-salle-de-bain.yaml`.
+2. Then this repo: the `homeassistant_config_files` change. Deployed in the
+   reverse order, the *Require the private config repo* assert stops the play.
+   That is the safety net working, not a bug.
+3. `ansible-playbook playbook.yml --limit adguard,hassium`.
+
+**Know the limit of the gate**: `check_config` validates the `lovelace:` block
+in `configuration.yaml`, **not** the content of the dashboard file. A typo in
+the dashboard shows up as a red card in the UI, not as a failed play. So
+after each deploy, open the dashboard and check it.
+
+*Done when*: *Salle de bain* in the sidebar, the boost button starts and stops
+a boost seen in the app, the schedule card shows the same week as the app.
+
+## Phase 5 — documentation
+
+- `docs/home-assistant.md`:
+  - *Ownership split*: Ansible now also writes `custom_components/cozytouch`
+    (read-only bind-mount), the one exception to "only
+    `homeassistant_config_files`".
+  - *UI-side choices to redo*: the Cozytouch config entry (account + poll
+    interval), the entity renames, the schedule card resource.
+- `docs/thermor-allure-4-plan.md`: mark the phases done, keep the filled
+  inventory and validation tables as the record of what this device exposes.
+
+## Updating the integration later
+
+1. Read the release notes (`release_notes/` in the repo): look for entity
+   renames, they break the dashboard silently.
+2. Bump `cozytouch_commit` (+ `cozytouch_version`) in a PR.
+3. Deploy; the checkout task notifies the HA restart.
+4. Re-run phase 3, rows 1 and 3a.
+
+Rollback: revert the PR and redeploy. The config entry survives a downgrade
+**within** the CalVer line; never go back to `1.4`.
+
+## Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Atlantic changes its API | Entities `unavailable` | The device keeps its own program; the app still works; wait for an integration fix |
+| Atlantic cloud outage | Same | Same: no local path exists. Fallback below |
+| Account rate-limited | App and HA both blocked | Poll at 60 s, never lower |
+| Single maintainer project (~100 open issues) | Slow fixes | Pinned SHA: nothing breaks by itself; diagnostics make issues actionable |
+
+**Local fallback if the cloud becomes unbearable**: a fil pilote module
+(Zigbee or Shelly), if the towel rail exposes the fil pilote wire (check the
+manual). Comfort / eco / frost / off in 100 % local. You lose the boost, the
+built-in program and the temperature reading (a Zigbee sensor in the bathroom
+covers that last one).
+
+## Appendix — Option B (HACS)
+
+If HACS is chosen after all:
+
+1. Download a **pinned** HACS release instead of `wget | bash`:
+   `https://github.com/hacs/integration/releases/download/<version>/hacs.zip`,
+   unzip into `config/custom_components/hacs`. That can be an Ansible
+   `get_url` (with `checksum:`) + `unarchive`, same idea as phase 1.
+2. Restart, *Add integration → HACS*, validate the GitHub device code.
+3. HACS → ⋮ → *Custom repositories* → `https://github.com/gduteil/cozytouch`,
+   type *Integration* → Download → restart.
+4. Continue at phase 2.
+
+Trade-off: HACS writes `custom_components/` and its own `.storage` from the UI.
+The HA backup covers them, the Git repo does not.
